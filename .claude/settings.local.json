@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('xlsx'\\); console.log\\('xlsx ok'\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(node *)",
+      "mcp__playwright__browser_resize",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_click",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git rm *)",
+      "Bash(git -c user.name=mrmute -c user.email=sigmaidea@gmail.com commit -q -m ' *)"
+    ]
+  }
+}

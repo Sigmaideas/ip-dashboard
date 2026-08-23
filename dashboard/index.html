@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light only" />
+  <title>엑스와이지 IP 통합 관리</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <!-- ?v= 는 캐시 버스팅. GitHub Pages 가 max-age=600 으로 내려줘서 파라미터를 안 바꾸면
+       코드를 고쳐도 브라우저가 10분간 옛 파일을 계속 쓴다. app.js/style.css 수정 시 함께 올릴 것 -->
+  <link rel="stylesheet" href="style.css?v=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="logo.png" alt="XYZ" />
+    </div>
+    <nav class="nav">
+      <div class="nav-section">포트폴리오</div>
+      <a class="nav-item active" data-view="overview">
+        <i data-lucide="layout-dashboard" class="nav-icon"></i>
+        개요
+      </a>
+      <a class="nav-item" data-view="list">
+        <i data-lucide="file-text" class="nav-icon"></i>
+        특허 목록
+        <span class="nav-badge" id="badgeList">0</span>
+      </a>
+      <a class="nav-item" data-view="family">
+        <i data-lucide="git-branch" class="nav-icon"></i>
+        관련 특허군
+        <span class="nav-badge" id="badgeFamily">0</span>
+      </a>
+      <div class="nav-section">분석</div>
+      <a class="nav-item" data-view="inventors">
+        <i data-lucide="users" class="nav-icon"></i>
+        발명자
+        <span class="nav-badge" id="badgeInventors">0</span>
+      </a>
+      <a class="nav-item" data-view="evaluation">
+        <i data-lucide="gauge" class="nav-icon"></i>
+        기술평가
+      </a>
+    </nav>
+    <div class="sidebar-foot">내부용 · v1.0</div>
+  </aside>
+
+  <div class="app">
+    <header class="topbar">
+      <div>
+        <div class="topbar-eyebrow" id="pageEyebrow">주식회사 엑스와이지</div>
+        <h1 id="pageTitle">IP 포트폴리오 개요</h1>
+      </div>
+      <div class="topbar-meta">
+        <span class="meta-value" id="lastUpdated">-</span>
+      </div>
+    </header>
+
+    <main>
+      <!-- ===== 개요 ===== -->
+      <div class="view" id="overviewView">
+        <section class="kpi-row" id="kpiRow"></section>
+
+        <div class="grid-2">
+          <section class="card chart-card">
+            <div class="card-head">
+              <h2><i data-lucide="globe" class="head-icon"></i>국가별 분포</h2>
+              <span class="hint">전체 기준</span>
+            </div>
+            <div class="chart-wrap"><canvas id="countryChart"></canvas></div>
+          </section>
+
+          <section class="card chart-card">
+            <div class="card-head">
+              <h2><i data-lucide="pie-chart" class="head-icon"></i>기술분류별 분포</h2>
+              <span class="hint">전체 기준</span>
+            </div>
+            <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
+          </section>
+        </div>
+
+        <section class="card chart-card">
+          <div class="card-head">
+            <h2><i data-lucide="trending-up" class="head-icon"></i>연도별 출원 · 등록 추이</h2>
+            <span class="hint">출원일 · 등록일 기준</span>
+          </div>
+          <div class="chart-wrap"><canvas id="yearlyChart"></canvas></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2><i data-lucide="star" class="head-icon"></i>핵심 특허 TOP 5</h2>
+            <span class="hint">기술평가 종합점수 상위 · 클릭 시 상세</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>등급</th><th>명칭</th><th>국가</th><th>상태</th><th>종합점수</th>
+                </tr>
+              </thead>
+              <tbody id="topPatentsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ===== 특허 목록 ===== -->
+      <div class="view" id="listView" hidden>
+        <section class="card">
+          <div class="filter-bar">
+            <input class="search-input" id="searchInput" type="search" placeholder="명칭 · 출원번호 · 발명자 · 키워드 검색" />
+            <select class="select" id="filterCountry"><option value="">전체 국가</option></select>
+            <select class="select" id="filterStatus"><option value="">전체 상태</option></select>
+            <select class="select" id="filterCategory"><option value="">전체 분류</option></select>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2><i data-lucide="list" class="head-icon"></i>특허 목록</h2>
+            <span class="hint" id="listHint">컬럼 클릭 시 정렬 · 명칭 클릭 시 상세</span>
+          </div>
+          <div class="table-wrap">
+            <table id="patentTable">
+              <thead>
+                <tr>
+                  <th data-sort="grade">등급</th>
+                  <th data-sort="title">명칭</th>
+                  <th data-sort="country">국가</th>
+                  <th data-sort="status">상태</th>
+                  <th data-sort="applicationNumber">출원번호</th>
+                  <th data-sort="applicationDate">출원일</th>
+                  <th data-sort="registrationDate">등록일</th>
+                  <th data-sort="inventorText">발명자</th>
+                  <th data-sort="score">종합점수</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ===== 관련 특허군 ===== -->
+      <div class="view" id="familyView" hidden>
+        <section class="card chart-card">
+          <div class="card-head">
+            <h2><i data-lucide="bar-chart-3" class="head-icon"></i>특허군별 보유 건수</h2>
+            <span class="hint">동일 기술 계열로 묶은 그룹</span>
+          </div>
+          <div class="chart-wrap"><canvas id="familyChart"></canvas></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2><i data-lucide="git-branch" class="head-icon"></i>특허군 상세</h2>
+            <span class="hint">카드 클릭 시 특허 상세</span>
+          </div>
+          <div id="familyBody"></div>
+        </section>
+      </div>
+
+      <!-- ===== 발명자 ===== -->
+      <div class="view" id="inventorsView" hidden>
+        <section class="kpi-row" id="inventorKpiRow"></section>
+
+        <section class="card chart-card">
+          <div class="card-head">
+            <h2><i data-lucide="users" class="head-icon"></i>발명자별 참여 건수</h2>
+            <span class="hint">공동발명 포함 · 중복 집계</span>
+          </div>
+          <div class="chart-wrap chart-wrap-tall"><canvas id="inventorChart"></canvas></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2><i data-lucide="list" class="head-icon"></i>발명자별 상세</h2>
+            <span class="hint">컬럼 클릭 시 정렬</span>
+          </div>
+          <div class="table-wrap">
+            <table id="inventorTable">
+              <thead>
+                <tr>
+                  <th data-sort="name">발명자</th>
+                  <th data-sort="total">총 건수</th>
+                  <th data-sort="registered">등록</th>
+                  <th data-sort="pending">출원중</th>
+                  <th data-sort="avgScore">평균 평가점수</th>
+                  <th data-sort="categoryText">주요 분야</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ===== 기술평가 ===== -->
+      <div class="view" id="evaluationView" hidden>
+        <section class="card">
+          <div class="empty-banner" style="background:var(--surface-2);border-color:var(--border)">
+            <strong style="color:var(--text)">평가 기준</strong>
+            <p style="margin-bottom:0">
+              4개 축을 각 5점 척도로 평가하고 평균을 종합점수로 씁니다 —
+              <b>기술성</b>(기술 난이도·독창성) ·
+              <b>시장성</b>(적용 시장 규모·성장성) ·
+              <b>권리성</b>(청구범위 넓이·회피 난이도) ·
+              <b>활용도</b>(자사 제품 실제 적용 정도).
+              종합 4.5↑ <b>S</b> · 3.5↑ <b>A</b> · 2.5↑ <b>B</b> · 그 미만 <b>C</b>.
+            </p>
+          </div>
+        </section>
+
+        <section class="kpi-row" id="evalKpiRow"></section>
+
+        <div class="grid-2">
+          <section class="card chart-card">
+            <div class="card-head">
+              <h2><i data-lucide="radar" class="head-icon"></i>평가축별 평균</h2>
+              <span class="hint">전체 평균 · 5점 만점</span>
+            </div>
+            <div class="chart-wrap"><canvas id="radarChart"></canvas></div>
+          </section>
+
+          <section class="card chart-card">
+            <div class="card-head">
+              <h2><i data-lucide="layers" class="head-icon"></i>등급 분포</h2>
+              <span class="hint">평가 완료 건 기준</span>
+            </div>
+            <div class="chart-wrap"><canvas id="gradeChart"></canvas></div>
+          </section>
+        </div>
+
+        <section class="card chart-card">
+          <div class="card-head">
+            <h2><i data-lucide="scatter-chart" class="head-icon"></i>기술성 · 시장성 매트릭스</h2>
+            <span class="hint">우상단이 핵심 특허 · 점 클릭 시 상세</span>
+          </div>
+          <div class="chart-wrap chart-wrap-tall"><canvas id="matrixChart"></canvas></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2><i data-lucide="trophy" class="head-icon"></i>평가 랭킹</h2>
+            <span class="hint">컬럼 클릭 시 정렬 · 명칭 클릭 시 상세</span>
+          </div>
+          <div class="table-wrap">
+            <table id="evalTable">
+              <thead>
+                <tr>
+                  <th data-sort="grade">등급</th>
+                  <th data-sort="title">명칭</th>
+                  <th data-sort="technology">기술성</th>
+                  <th data-sort="marketability">시장성</th>
+                  <th data-sort="rights">권리성</th>
+                  <th data-sort="utilization">활용도</th>
+                  <th data-sort="score">종합</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-bg" data-close></div>
+    <div class="modal-card">
+      <button class="modal-close" data-close aria-label="닫기">&times;</button>
+      <h3 id="modalTitle">특허 상세</h3>
+      <div class="modal-sub" id="modalSub"></div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="app.js?v=1"></script>
+</body>
+</html>

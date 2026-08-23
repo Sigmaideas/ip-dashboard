@@ -1,0 +1,11 @@
+node_modules/
+.DS_Store
+*.log
+.env
+.claude/settings.local.json
+.playwright-mcp/
+
+# 원본 특허 엑셀은 내부 문서라 리포에 올리지 않는다.
+# 임포트 결과인 data/patents.json 만 커밋한다.
+inbox/*
+!inbox/.gitkeep

@@ -1,0 +1,13 @@
+{
+  "name": "ip-dashboard",
+  "version": "1.0.0",
+  "description": "주식회사 엑스와이지 지식재산권(특허) 통합 관리 대시보드 (내부용)",
+  "private": true,
+  "scripts": {
+    "dev": "node server.js",
+    "import": "node scripts/import-excel.js"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
