@@ -27,7 +27,6 @@ const GRADE_COLOR = { S: '#4263eb', A: '#7950f2', B: '#868e96', C: '#e8590c' };
 const VIEW_TITLE = {
   overview: 'IP 포트폴리오 개요',
   list: '권리 목록',
-  renewal: '갱신 관리',
   family: '특허 패밀리',
   inventors: '발명자 분석',
   evaluation: '기술평가',
@@ -37,7 +36,6 @@ let db = { meta: {}, rights: [] };
 const charts = {};
 const sortState = {
   list: { key: 'applicationDate', dir: 'desc' },
-  renewal: { key: 'dueDate', dir: 'asc' },
   inventor: { key: 'total', dir: 'desc' },
   eval: { key: 'score', dir: 'desc' },
 };
@@ -120,14 +118,12 @@ function render() {
   $('#pageEyebrow').textContent = db.meta.company || '주식회사 엑스와이지';
 
   $('#badgeList').textContent = db.rights.length;
-  $('#badgeRenewal').textContent = db.rights.filter((r) => r.dueDate).length;
   $('#badgeFamily').textContent = new Set(patents().map((p) => p.family)).size;
   $('#badgeInventors').textContent = new Set(patents().flatMap((p) => p.inventors)).size;
 
   buildFilters();
   renderOverview();
   renderList();
-  renderRenewal();
   renderFamily();
   renderInventors();
   renderEvaluation();
@@ -286,57 +282,6 @@ function renderList() {
       </tr>`).join('')
     : `<tr><td colspan="9" class="empty-msg">조건에 맞는 권리가 없습니다.</td></tr>`;
   markSorted('#rightsTable', sortState.list);
-}
-
-/* ===== 갱신 관리 ===== */
-function renderRenewal() {
-  // 오늘 기준 D-day. 시분 차이로 하루가 어긋나지 않게 날짜만 비교한다
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const dayDiff = (d) => Math.round((new Date(d + 'T00:00:00') - new Date(todayStr + 'T00:00:00')) / 86400000);
-
-  // DUE DATE 가 등록일과 같은 건은 실제 기한이 아니라 등록일이 그대로 복사된 것이라 제외한다
-  const notDeadline = db.rights.filter((r) => r.dueDate && r.dueDate === r.registrationDate).length;
-  const rows = db.rights
-    .filter((r) => r.dueDate && r.dueDate !== r.registrationDate)
-    .map((r) => {
-      const dday = dayDiff(r.dueDate);
-      // 기한이 지났어도 비고에 납부 기재가 있으면 처리된 건 — 빨간 경고로 띄우면 진짜 미납 건이 묻힌다
-      const paid = /납부|갱신|완료/.test(r.notes || '') && !/미납|예정|필요/.test(r.notes || '');
-      return { ...r, dday, state: dday < 0 ? (paid ? 'paid' : 'overdue') : dday <= 365 ? 'soon' : 'future' };
-    });
-
-  const soon = rows.filter((r) => r.state === 'soon');
-  const overdue = rows.filter((r) => r.state === 'overdue');
-
-  $('#renewalKpiRow').innerHTML = [
-    kpi('기한 관리 대상', rows.length, `등록일 복사분 ${notDeadline}건 제외`, 'calendar-clock', true),
-    kpi('1년 내 도래', soon.length, soon.length ? `가장 이른 건 D-${Math.min(...soon.map((r) => r.dday))}` : '해당 없음', 'alarm-clock'),
-    kpi('경과 · 미확인', overdue.length, '비고에 납부 기재가 없는 건', 'alert-triangle'),
-    kpi('납부 · 처리 확인', rows.filter((r) => r.state === 'paid').length, '비고 기재 기준', 'receipt'),
-  ].join('');
-
-  const LABEL = {
-    paid: (d) => `경과 ${-d}일`,
-    overdue: (d) => `경과 ${-d}일`,
-    soon: (d) => `D-${d}`,
-    future: (d) => `D-${d}`,
-  };
-  const CLS = { paid: 'paid', overdue: 'negative', soon: 'warn', future: 'dim' };
-
-  const sorted = sortRows(rows, sortState.renewal);
-  $('#renewalTable tbody').innerHTML = sorted.length
-    ? sorted.map((r) => `<tr>
-        <td class="num">${fmtDate(r.dueDate)}</td>
-        <td class="num dday ${CLS[r.state]}">${LABEL[r.state](r.dday)}${r.state === 'paid' ? ' <span class="tag registered">처리</span>' : ''}</td>
-        <td>${typeTag(r.type)}</td>
-        <td><span class="patent-link" data-id="${r.id}">${escapeHtml(r.title)}</span></td>
-        <td><span class="tag country">${escapeHtml(r.country)}</span></td>
-        <td class="num dim">${escapeHtml(r.registrationNumber || '-')}</td>
-        <td class="dim">${escapeHtml(r.notes || '-')}</td>
-      </tr>`).join('')
-    : `<tr><td colspan="7" class="empty-msg">기한 관리 대상이 없습니다.</td></tr>`;
-  markSorted('#renewalTable', sortState.renewal);
 }
 
 /* ===== 특허 패밀리 ===== */
@@ -759,7 +704,7 @@ function drawDoughnut(id, entries, colors) {
 
 /* ===== 뷰 전환 & 이벤트 ===== */
 function switchView(view) {
-  ['overview', 'list', 'renewal', 'family', 'inventors', 'evaluation'].forEach((v) => {
+  ['overview', 'list', 'family', 'inventors', 'evaluation'].forEach((v) => {
     $(`#${v}View`).hidden = v !== view;
   });
   $$('.nav-item').forEach((el) => el.classList.toggle('active', el.dataset.view === view));
@@ -797,7 +742,6 @@ function bind() {
     );
   };
   bindSort('#rightsTable', 'list', renderList);
-  bindSort('#renewalTable', 'renewal', renderRenewal);
   bindSort('#inventorTable', 'inventor', renderInventors);
   bindSort('#evalTable', 'eval', renderEvaluation);
 

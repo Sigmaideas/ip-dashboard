@@ -350,14 +350,6 @@ tbody tr:hover { background: var(--surface-2); }
 .tag.type-design { background: var(--warn-soft); color: #e8590c; }
 .tag.type-copyright { background: #e7f9fb; color: #0b7285; }
 
-/* 갱신 관리 D-day */
-.dday { font-weight: 700; }
-.dday.negative { color: var(--negative); }
-.dday.warn { color: var(--warn); }
-.dday.dim { color: var(--text-dim); font-weight: 500; }
-.dday.paid { color: var(--text-dim); font-weight: 500; }
-.dday.paid .tag { margin-left: 6px; }
-
 .tag-row { display: flex; flex-wrap: wrap; gap: 4px; }
 
 /* 등급 뱃지 — 기술평가 종합 등급 */

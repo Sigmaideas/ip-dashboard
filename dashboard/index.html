@@ -29,11 +29,6 @@
         권리 목록
         <span class="nav-badge" id="badgeList">0</span>
       </a>
-      <a class="nav-item" data-view="renewal">
-        <i data-lucide="calendar-clock" class="nav-icon"></i>
-        갱신 관리
-        <span class="nav-badge" id="badgeRenewal">0</span>
-      </a>
       <div class="nav-section">특허 분석</div>
       <a class="nav-item" data-view="family">
         <i data-lucide="git-branch" class="nav-icon"></i>
@@ -148,50 +143,6 @@
                   <th data-sort="registrationNumber">등록번호</th>
                   <th data-sort="inventorText">발명자</th>
                   <th data-sort="score">평가</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-
-      <!-- ===== 갱신 관리 ===== -->
-      <div class="view" id="renewalView" hidden>
-        <section class="card">
-          <div class="empty-banner" style="background:var(--warn-soft);border-color:#ffe3bf">
-            <strong style="color:var(--warn)">갱신 기한 관리</strong>
-            <p>
-              엑셀의 <b>DUE DATE</b> 컬럼 기준이며, 권리별로 의미가 다릅니다 —
-              <b>특허</b>는 등록일 +3년(다음 연차등록료 납부기한) · <b>상표</b>는 등록일 +10년(갱신기한) ·
-              <b>PCT</b>는 국내단계 진입기한.
-            </p>
-            <p style="margin-bottom:0">
-              DUE DATE 가 등록일과 같은 <b>14건</b>은 기한이 아니라 등록일이 그대로 복사된 것으로 보아 제외했습니다.
-              기한이 지났어도 비고에 납부·갱신 기재가 있으면 <span class="tag registered">처리</span> 로 표시하고,
-              기재가 없는 건만 경고로 남깁니다. <b>비고란 기재에 의존하므로 실제 납부 여부는 특허사무소 확인이 필요합니다.</b>
-            </p>
-          </div>
-        </section>
-
-        <section class="kpi-row" id="renewalKpiRow"></section>
-
-        <section class="card">
-          <div class="card-head">
-            <h2><i data-lucide="calendar-clock" class="head-icon"></i>기한 임박 순</h2>
-            <span class="hint">DUE DATE 가 기재된 건만 · 지난 기한 우선</span>
-          </div>
-          <div class="table-wrap">
-            <table id="renewalTable">
-              <thead>
-                <tr>
-                  <th data-sort="dueDate">DUE DATE</th>
-                  <th data-sort="dday">D-day</th>
-                  <th data-sort="type">구분</th>
-                  <th data-sort="title">명칭</th>
-                  <th data-sort="country">국가</th>
-                  <th data-sort="registrationNumber">등록번호</th>
-                  <th data-sort="notes">연차료 현황</th>
                 </tr>
               </thead>
               <tbody></tbody>
