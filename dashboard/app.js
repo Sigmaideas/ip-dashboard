@@ -1,5 +1,5 @@
 /* 엑스와이지 IP 통합 관리 대시보드
-   데이터는 ../data/rights.json 한 파일. scripts/import-excel.js 가 관리대장 엑셀을 이 형식으로 변환한다.
+   데이터는 data/rights.json 한 파일. scripts/import-excel.js 가 관리대장 엑셀을 이 형식으로 변환한다.
    특허 평가는 data/evaluations.json 에서 패밀리 단위로 붙는다. */
 
 // loungex-brand-dashboard 와 동일한 팔레트 — 두 대시보드의 차트 색을 맞춘다
@@ -88,7 +88,7 @@ function gradeOf(score) {
 
 /* ===== 로드 ===== */
 async function load() {
-  const res = await fetch('../data/rights.json', { cache: 'no-store' });
+  const res = await fetch('data/rights.json', { cache: 'no-store' });
   if (!res.ok) throw new Error(`rights.json 로드 실패 (${res.status})`);
   const raw = await res.json();
   db.meta = raw.meta || {};
