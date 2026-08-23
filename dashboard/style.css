@@ -58,10 +58,9 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .brand-logo {
-  height: 26px;
+  /* XYZ 워드마크는 라운지엑스 로고보다 글자 폭이 짧아 같은 높이면 왜소해 보인다 */
+  height: 22px;
   width: auto;
-  /* 원본 로고가 흰색이라 밝은 사이드바에서 보이도록 검정으로 반전 */
-  filter: invert(1);
 }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav-section {
