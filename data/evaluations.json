@@ -1,0 +1,113 @@
+{
+  "_note": "특허 패밀리 단위 기술평가 초안. 같은 발명의 KR/US/CN/PCT 건은 이 평가를 공유한다. 각 축 5점 척도 — 기술성(난이도·독창성) / 시장성(적용 시장 규모·성장성) / 권리성(청구범위 넓이·회피 난이도) / 활용도(자사 제품 실제 적용 정도). 내부 검토용 참고 지표이며 공식 기술가치평가를 대체하지 않는다. 검토 후 수정할 것.",
+  "_criteria": {
+    "권리성": "다국 출원(KR/US/CN/PCT) 건은 회사가 실제로 방어 가치를 인정해 비용을 투입한 것으로 보아 가점",
+    "활용도": "현재 주력 제품(바리스브루·바리스드립·아리스·라운지엑스 무인매장) 적용 여부 기준. 물류·방역 계열은 엑스와이지부산/코봇 인수 자산으로 현 주력과 거리가 있어 감점"
+  },
+  "byFamily": {
+    "위험도 판단 기반 로봇 안전제어": {
+      "technology": 4, "marketability": 5, "rights": 5, "utilization": 5,
+      "comment": "KR·US·CN·PCT 6건으로 포트폴리오 내 최대 패밀리. 사람과 같은 공간에서 동작하는 서비스 로봇의 필수 요건이고 협동로봇 안전규격과 맞물려 라이선싱 여지도 크다. 최우선 유지 대상."
+    },
+    "커피 드립을 수행하는 로봇 팔 제어 방법 및 제어 시스템": {
+      "technology": 5, "marketability": 4, "rights": 4, "utilization": 5,
+      "comment": "바리스드립의 근간. 바리스타 드립 궤적을 로봇 팔 제어로 옮긴 부분이 기술적 독창성이 가장 높다. KR·US·PCT 확보."
+    },
+    "사람과 로봇 간의 충돌을 방지하기 위한 실시간 충돌 방지 방법 및 이를 이용한 실시간 충돌 방지 시스템": {
+      "technology": 4, "marketability": 5, "rights": 4, "utilization": 4,
+      "comment": "2024년 등록된 안전제어 최신 건. 위험도 판단 패밀리를 실시간 회피까지 확장해 보완 관계가 좋다. 해외 출원 검토 권장."
+    },
+    "이미지 인식을 이용한 매장 내 식음료 이송 및 수거 시스템과 이를 이용한 식음료 이송 및 수거 방법": {
+      "technology": 4, "marketability": 4, "rights": 4, "utilization": 4,
+      "comment": "서빙뿐 아니라 다 쓴 식기 수거까지 청구범위에 넣은 점이 차별적이다. 무인매장 운영의 실질 병목을 다루며 4개국 확보."
+    },
+    "리드 디스펜서용 그리퍼 장치": {
+      "technology": 4, "marketability": 3, "rights": 4, "utilization": 5,
+      "comment": "컵 뚜껑 자동 취급은 무인카페 현장에서 실제로 자주 걸리는 문제다. 장치 청구항이라 회피가 비교적 어렵다. KR 단독이라 해외 확장 여지."
+    },
+    "무인 상점 운영 방법 및 이를 이용한 무인 상점 시스템": {
+      "technology": 3, "marketability": 5, "rights": 3, "utilization": 5,
+      "comment": "라운지엑스 무인매장 운영의 상위 개념. 활용도와 시장성은 최상급이나 운영 방법 청구항 특성상 선행기술이 많아 권리 범위는 넓지 않다."
+    },
+    "다관절 로봇팔 및 이를 이용한 인쇄 방법": {
+      "technology": 4, "marketability": 3, "rights": 4, "utilization": 4,
+      "comment": "음료 표면 인쇄(라떼아트) 차별화 요소. KR·US·CN·PCT 4개국 확보로 방어력이 좋다. 다만 적용 시장 자체가 카페로 한정적."
+    },
+    "이동형 로봇을 이용한 무인 결제 방법 및 이를 이용한 무인 결제 시스템": {
+      "technology": 4, "marketability": 4, "rights": 4, "utilization": 3,
+      "comment": "무인매장의 결제 단계를 로봇과 묶은 건. 4개국 출원 중 CN·US는 아직 심사 중이라 등록 확정 시 가치가 올라간다."
+    },
+    "로봇을 이용한 주문 제품 전달 및 전달 위치 표시 방법 및 이를 이용한 주문 제품 전달 시스템": {
+      "technology": 3, "marketability": 4, "rights": 3, "utilization": 5,
+      "comment": "스마트 픽업존의 기반 특허로 보인다. 실제 매장 운영에 바로 쓰이나 KR 단독이고 청구범위가 전달·표시 절차에 한정적."
+    },
+    "아이스크림 제조를 위한 로봇 팔 시스템 및 이를 위한 제어 방법": {
+      "technology": 3, "marketability": 3, "rights": 4, "utilization": 4,
+      "comment": "아리스 제품의 근간. 4개국 확보로 권리성은 좋으나 아이스크림 로봇 시장 규모 자체가 커피 대비 작다. PCT 1건 이관 상태 확인 필요."
+    },
+    "자율주행 차량 음식 주문·전달": {
+      "technology": 3, "marketability": 4, "rights": 3, "utilization": 2,
+      "comment": "5건으로 규모는 크나 CN 1건이 포기 처리됐고 제품화가 아직 초기다. 배달 자율주행은 경쟁 출원이 많아 권리 범위가 좁다. 연차료 대비 실익 재검토 권장."
+    },
+    "AI 자율주행 스마트 물류": {
+      "technology": 3, "marketability": 4, "rights": 3, "utilization": 2,
+      "comment": "엑스와이지부산(코봇) 계열 자산. 물류 로봇 시장은 크지만 현 주력 제품라인과 거리가 있어 활용도가 낮다."
+    },
+    "자율주행 이송로봇 및 이를 이용한 배송방법": {
+      "technology": 3, "marketability": 4, "rights": 3, "utilization": 2,
+      "comment": "삼성생명공익재단(삼성서울병원) 공동출원. 병원 물류는 성장 시장이나 공동소유라 단독 활용에 제약이 있다."
+    },
+    "병원 내 물품전달 로봇 시스템": {
+      "technology": 3, "marketability": 4, "rights": 3, "utilization": 2,
+      "comment": "병원 특화 물류 계열. 출원 상태이며 등록 여부에 따라 재평가 필요."
+    },
+    "혈액 이송로봇": {
+      "technology": 3, "marketability": 4, "rights": 3, "utilization": 2,
+      "comment": "2024년 출원. 혈액 검체 이송은 규제·검증 요건이 높아 진입장벽이 되지만 그만큼 상용화까지 시간이 걸린다."
+    },
+    "수술도구 이송로봇": {
+      "technology": 3, "marketability": 4, "rights": 3, "utilization": 2,
+      "comment": "혈액 이송로봇과 같은 계열의 2024년 출원. 병원 사업 확장 시 묶어서 활용할 수 있다."
+    },
+    "모듈화된 로봇 플랫폼": {
+      "technology": 3, "marketability": 3, "rights": 3, "utilization": 2,
+      "comment": "플랫폼·구축방법 2건 세트. 인수 자산이며 현 제품과 직접 연결되지 않는다."
+    },
+    "스마트 물류 시스템용 자율 이동 로봇": {
+      "technology": 3, "marketability": 3, "rights": 3, "utilization": 2,
+      "comment": "물류 계열 단독 건. 모듈화 플랫폼 패밀리와 함께 묶어 관리하는 편이 낫다."
+    },
+    "태엽을 이용한 자동 핸드 드립 장치": {
+      "technology": 4, "marketability": 2, "rights": 3, "utilization": 1,
+      "comment": "전력 없이 태엽으로 드립하는 기구적 발상이 독창적이다. 다만 현 제품라인에 적용되지 않아 활용도가 낮다. 별도 제품화 또는 매각·라이선싱 검토 대상."
+    },
+    "작업자 선도형 스마트 이송 로봇": {
+      "technology": 3, "marketability": 3, "rights": 3, "utilization": 1,
+      "comment": "작업자 추종 방식 이송 로봇. 저작권 등록(C-2021-053038)과 짝을 이룬다. 현 사업 연관성 낮음."
+    },
+    "모듈화된 로봇 플랫폼의 구축 방법": {
+      "technology": 3, "marketability": 3, "rights": 3, "utilization": 2,
+      "comment": "모듈화 플랫폼의 방법 청구항 대응 건."
+    },
+    "교통약자를 위한 자율주행 모빌리티": {
+      "technology": 3, "marketability": 3, "rights": 2, "utilization": 1,
+      "comment": "출원 상태로 장기 계류 중. 공공 조달 연계가 없으면 등록 실익이 크지 않다."
+    },
+    "방역 로봇": {
+      "technology": 3, "marketability": 2, "rights": 3, "utilization": 1,
+      "comment": "KR 4건 계열. 코로나 특수가 끝나며 시장이 크게 축소됐다. 등록 3건의 연차료 대비 실익을 재검토할 대표적 대상."
+    },
+    "옥내외 순찰 로봇 플랫폼 및 순찰 로봇 제어 방법": {
+      "technology": 2, "marketability": 3, "rights": 2, "utilization": 1,
+      "comment": "순찰 로봇은 경쟁 출원이 많고 청구범위가 좁다. 현 사업과 무관해 유지 우선순위 낮음."
+    },
+    "열화상 영상에 기초한 진단 방법 및 전자 장치": {
+      "technology": 2, "marketability": 2, "rights": 2, "utilization": 1,
+      "comment": "2015년 출원으로 포트폴리오 내 최고참(2035년 만료). 로봇 사업과 연관이 없고 이미 9년차 연차료를 납부 중이다. 유지 여부 판단이 필요한 1순위."
+    },
+    "해변 청소 자율주행 로봇": {
+      "technology": 1, "marketability": 2, "rights": 1, "utilization": 1,
+      "comment": "거절 확정. 권리가 없으므로 관리 대상에서 제외해도 된다."
+    }
+  }
+}

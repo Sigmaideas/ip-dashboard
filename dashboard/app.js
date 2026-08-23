@@ -1,40 +1,47 @@
 /* 엑스와이지 IP 통합 관리 대시보드
-   데이터는 ../data/patents.json 한 파일. scripts/import-excel.js 가 엑셀을 이 형식으로 변환한다. */
+   데이터는 ../data/rights.json 한 파일. scripts/import-excel.js 가 관리대장 엑셀을 이 형식으로 변환한다.
+   특허 평가는 data/evaluations.json 에서 패밀리 단위로 붙는다. */
 
 // loungex-brand-dashboard 와 동일한 팔레트 — 두 대시보드의 차트 색을 맞춘다
 const PALETTE = ['#4263eb', '#1f2329', '#7950f2', '#f59f00', '#2f9e44', '#e8590c', '#15aabf', '#e64980', '#5c7cfa', '#868e96'];
 
+const TYPE_LABEL = { patent: '특허', trademark: '상표', design: '디자인', copyright: '저작권', other: '기타' };
+const TYPE_COLOR = { patent: '#4263eb', trademark: '#7950f2', design: '#f59f00', copyright: '#15aabf', other: '#868e96' };
 const STATUS_LABEL = {
-  registered: '등록',
-  pending: '출원중',
-  rejected: '거절',
-  abandoned: '포기',
-  expired: '소멸',
+  registered: '등록', pending: '출원', examining: '심사중', pct: 'PCT',
+  rejected: '거절', abandoned: '포기', transferred: '이관',
 };
-const COUNTRY_LABEL = { KR: '한국', US: '미국', CN: '중국', JP: '일본', EP: '유럽', WO: 'PCT' };
+// 상태를 살아있는 권리 / 진행중 / 종료 세 갈래로 묶는다. KPI 와 상태 차트가 이 구분을 쓴다
+const STATUS_GROUP = {
+  registered: 'live', pending: 'progress', examining: 'progress', pct: 'progress',
+  rejected: 'closed', abandoned: 'closed', transferred: 'closed',
+};
+const COUNTRY_LABEL = { KR: '한국', US: '미국', CN: '중국', JP: '일본', EP: '유럽', PCT: 'PCT', SG: '싱가포르', IN: '인도' };
 const AXES = [
   { key: 'technology', label: '기술성' },
   { key: 'marketability', label: '시장성' },
   { key: 'rights', label: '권리성' },
   { key: 'utilization', label: '활용도' },
 ];
+const GRADE_COLOR = { S: '#4263eb', A: '#7950f2', B: '#868e96', C: '#e8590c' };
 const VIEW_TITLE = {
   overview: 'IP 포트폴리오 개요',
-  list: '특허 목록',
-  family: '관련 특허군',
+  list: '권리 목록',
+  renewal: '갱신 관리',
+  family: '특허 패밀리',
   inventors: '발명자 분석',
   evaluation: '기술평가',
 };
 
-let db = { meta: {}, patents: [] };
-let currentView = 'overview';
+let db = { meta: {}, rights: [] };
 const charts = {};
 const sortState = {
   list: { key: 'applicationDate', dir: 'desc' },
+  renewal: { key: 'dueDate', dir: 'asc' },
   inventor: { key: 'total', dir: 'desc' },
   eval: { key: 'score', dir: 'desc' },
 };
-const filters = { q: '', country: '', status: '', category: '' };
+const filters = { q: '', type: '', country: '', status: '' };
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -42,11 +49,11 @@ const escapeHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtDate = (d) => (d ? String(d).slice(0, 10) : '-');
 const yearOf = (d) => (d ? Number(String(d).slice(0, 4)) : null);
+const patents = () => db.rights.filter((r) => r.type === 'patent');
 
 /* ===== 평가 점수 ===== */
-// 4개 축 중 입력된 것만 평균. 하나도 없으면 null(미평가)로 두고 등급도 NA.
-function scoreOf(p) {
-  const vals = AXES.map((a) => p.evaluation?.[a.key]).filter((v) => typeof v === 'number' && v > 0);
+function scoreOf(ev) {
+  const vals = AXES.map((a) => ev?.[a.key]).filter((v) => typeof v === 'number' && v > 0);
   if (!vals.length) return null;
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
@@ -58,148 +65,44 @@ function gradeOf(score) {
   return 'C';
 }
 
-/* ===== 로드 & 정규화 ===== */
+/* ===== 로드 ===== */
 async function load() {
-  const res = await fetch('../data/patents.json', { cache: 'no-store' });
-  if (!res.ok) throw new Error(`patents.json 로드 실패 (${res.status})`);
+  const res = await fetch('../data/rights.json', { cache: 'no-store' });
+  if (!res.ok) throw new Error(`rights.json 로드 실패 (${res.status})`);
   const raw = await res.json();
   db.meta = raw.meta || {};
-  db.patents = (raw.patents || []).map(normalize);
+  db.rights = (raw.rights || []).map((r) => {
+    const score = scoreOf(r.evaluation);
+    return {
+      ...r,
+      inventors: r.inventors || [],
+      inventorText: (r.inventors || []).join(', '),
+      score,
+      grade: gradeOf(score),
+      statusGroup: STATUS_GROUP[r.status] || 'progress',
+    };
+  });
   render();
 }
 
-function normalize(p, i) {
-  const inventors = Array.isArray(p.inventors)
-    ? p.inventors.filter(Boolean)
-    : String(p.inventors || '').split(/[,;/·]/).map((s) => s.trim()).filter(Boolean);
-  const ipc = Array.isArray(p.ipc) ? p.ipc : String(p.ipc || '').split(/[,;]/).map((s) => s.trim()).filter(Boolean);
-  const productLine = Array.isArray(p.productLine)
-    ? p.productLine
-    : String(p.productLine || '').split(/[,;]/).map((s) => s.trim()).filter(Boolean);
-  const score = scoreOf(p);
-  return {
-    ...p,
-    id: p.id || `P${String(i + 1).padStart(3, '0')}`,
-    title: p.title || '(제목 없음)',
-    country: (p.country || 'KR').toUpperCase(),
-    status: p.status || (p.registrationNumber ? 'registered' : 'pending'),
-    inventors,
-    ipc,
-    productLine,
-    family: p.family || '미분류',
-    category: p.category || '미분류',
-    inventorText: inventors.join(', '),
-    score,
-    grade: gradeOf(score),
-  };
-}
-
-/* ===== 렌더 ===== */
-function render() {
-  $('#lastUpdated').textContent = db.meta.lastUpdated
-    ? `업데이트 ${String(db.meta.lastUpdated).replace('T', ' ').slice(0, 16)}`
-    : '업데이트 기록 없음';
-  $('#pageEyebrow').textContent = db.meta.company || '주식회사 엑스와이지';
-
-  const families = new Set(db.patents.map((p) => p.family));
-  const inventors = new Set(db.patents.flatMap((p) => p.inventors));
-  $('#badgeList').textContent = db.patents.length;
-  $('#badgeFamily').textContent = families.size;
-  $('#badgeInventors').textContent = inventors.size;
-
-  buildFilterOptions();
-  renderOverview();
-  renderList();
-  renderFamily();
-  renderInventors();
-  renderEvaluation();
-  if (window.lucide) lucide.createIcons();
-}
-
+/* ===== 공통 ===== */
 function kpi(label, value, sub, icon, accent) {
-  return `
-    <div class="kpi-card${accent ? ' accent' : ''}">
+  return `<div class="kpi-card${accent ? ' accent' : ''}">
       <div class="kpi-icon"><i data-lucide="${icon}"></i></div>
       <div class="kpi-label">${escapeHtml(label)}</div>
       <div class="kpi-value">${value}</div>
       <div class="kpi-sub">${escapeHtml(sub)}</div>
     </div>`;
 }
-
 function countBy(arr, fn) {
   const m = new Map();
   arr.forEach((x) => {
     const k = fn(x);
-    (Array.isArray(k) ? k : [k]).forEach((kk) => {
-      if (kk == null || kk === '') return;
-      m.set(kk, (m.get(kk) || 0) + 1);
-    });
+    if (k == null || k === '') return;
+    m.set(k, (m.get(k) || 0) + 1);
   });
   return [...m.entries()].sort((a, b) => b[1] - a[1]);
 }
-
-/* ===== 개요 ===== */
-function renderOverview() {
-  const ps = db.patents;
-  const registered = ps.filter((p) => p.status === 'registered').length;
-  const pending = ps.filter((p) => p.status === 'pending').length;
-  const countries = new Set(ps.map((p) => p.country));
-  const inventors = new Set(ps.flatMap((p) => p.inventors));
-  const scored = ps.filter((p) => p.score != null);
-  const avg = scored.length ? scored.reduce((a, p) => a + p.score, 0) / scored.length : null;
-
-  $('#kpiRow').innerHTML = [
-    kpi('전체 특허', ps.length, `등록 ${registered} · 출원중 ${pending}`, 'file-text', true),
-    kpi('등록 특허', registered, `${countries.size}개국 · ${[...countries].join(' / ')}`, 'badge-check'),
-    kpi('발명자', inventors.size, '공동발명 포함', 'users'),
-    kpi(
-      '평균 평가점수',
-      avg == null ? '-' : `${avg.toFixed(2)}<small>/5</small>`,
-      `평가 완료 ${scored.length} / ${ps.length}건`,
-      'gauge'
-    ),
-  ].join('');
-
-  drawDoughnut('countryChart', countBy(ps, (p) => p.country).map(([k, v]) => [COUNTRY_LABEL[k] || k, v]));
-  drawDoughnut('categoryChart', countBy(ps, (p) => p.category));
-
-  // 연도별 출원/등록 — 두 계열의 연도 축을 합쳐야 막대가 어긋나지 않는다
-  const appYears = countBy(ps, (p) => yearOf(p.applicationDate));
-  const regYears = countBy(ps, (p) => yearOf(p.registrationDate));
-  const years = [...new Set([...appYears, ...regYears].map(([y]) => y))].filter(Boolean).sort();
-  const appMap = new Map(appYears);
-  const regMap = new Map(regYears);
-  drawChart('yearlyChart', {
-    type: 'bar',
-    data: {
-      labels: years,
-      datasets: [
-        { label: '출원', data: years.map((y) => appMap.get(y) || 0), backgroundColor: PALETTE[0], borderRadius: 4 },
-        { label: '등록', data: years.map((y) => regMap.get(y) || 0), backgroundColor: PALETTE[4], borderRadius: 4 },
-      ],
-    },
-    options: {
-      ...baseOptions(),
-      scales: { x: gridX(), y: { ...gridY(), ticks: { ...tickStyle(), precision: 0 } } },
-    },
-  });
-
-  const top = [...ps].filter((p) => p.score != null).sort((a, b) => b.score - a.score).slice(0, 5);
-  $('#topPatentsBody').innerHTML = top.length
-    ? top
-        .map(
-          (p) => `<tr>
-            <td><span class="grade ${p.grade}">${p.grade}</span></td>
-            <td><span class="patent-link" data-id="${p.id}">${escapeHtml(p.title)}</span></td>
-            <td><span class="tag country">${escapeHtml(p.country)}</span></td>
-            <td><span class="tag ${p.status}">${STATUS_LABEL[p.status] || p.status}</span></td>
-            <td>${scoreBar(p.score)}</td>
-          </tr>`
-        )
-        .join('')
-    : `<tr><td colspan="5" class="empty-msg">평가된 특허가 없습니다.</td></tr>`;
-}
-
 function scoreBar(score) {
   if (score == null) return '<span class="dim">-</span>';
   return `<div class="score">
@@ -207,30 +110,138 @@ function scoreBar(score) {
     <span class="score-value">${score.toFixed(1)}</span>
   </div>`;
 }
+const typeTag = (t) => `<span class="tag type-${t}">${TYPE_LABEL[t] || t}</span>`;
+const gradeTag = (g) => `<span class="grade ${g}">${g === 'NA' ? '–' : g}</span>`;
 
-/* ===== 특허 목록 ===== */
-function buildFilterOptions() {
-  const fill = (sel, entries, labelFn = (k) => k) => {
+function render() {
+  $('#lastUpdated').textContent = db.meta.lastUpdated
+    ? `업데이트 ${String(db.meta.lastUpdated).replace('T', ' ').slice(0, 16)}`
+    : '업데이트 기록 없음';
+  $('#pageEyebrow').textContent = db.meta.company || '주식회사 엑스와이지';
+
+  $('#badgeList').textContent = db.rights.length;
+  $('#badgeRenewal').textContent = db.rights.filter((r) => r.dueDate).length;
+  $('#badgeFamily').textContent = new Set(patents().map((p) => p.family)).size;
+  $('#badgeInventors').textContent = new Set(patents().flatMap((p) => p.inventors)).size;
+
+  buildFilters();
+  renderOverview();
+  renderList();
+  renderRenewal();
+  renderFamily();
+  renderInventors();
+  renderEvaluation();
+  if (window.lucide) lucide.createIcons();
+}
+
+/* ===== 개요 ===== */
+function renderOverview() {
+  const all = db.rights;
+  const live = all.filter((r) => r.statusGroup === 'live');
+  const pats = patents();
+  const fams = new Set(pats.map((p) => p.family));
+  const tms = all.filter((r) => r.type === 'trademark');
+  const countries = new Set(all.map((r) => r.country));
+
+  $('#kpiRow').innerHTML = [
+    kpi('전체 IP', all.length, `등록 ${live.length}건 · ${countries.size}개국`, 'library', true),
+    kpi('특허', pats.length, `${fams.size}개 발명 · 등록 ${pats.filter((p) => p.status === 'registered').length}`, 'file-text'),
+    kpi('상표', tms.length, `등록 ${tms.filter((t) => t.status === 'registered').length}건`, 'badge-check'),
+    kpi('디자인 · 저작권', all.filter((r) => r.type === 'design' || r.type === 'copyright').length, '디자인 + 저작권 합계', 'palette'),
+  ].join('');
+
+  drawDoughnut('typeChart',
+    countBy(all, (r) => r.type).map(([k, v]) => [TYPE_LABEL[k] || k, v]),
+    countBy(all, (r) => r.type).map(([k]) => TYPE_COLOR[k]));
+
+  drawDoughnut('countryChart', countBy(all, (r) => r.country).map(([k, v]) => [COUNTRY_LABEL[k] || k, v]));
+
+  // 연도별 출원 — 권리유형별로 쌓아 어느 해에 무엇을 집중 출원했는지 보이게 한다
+  const years = [...new Set(all.map((r) => yearOf(r.applicationDate)).filter(Boolean))].sort();
+  const types = ['patent', 'trademark', 'design', 'copyright'];
+  drawChart('yearlyChart', {
+    type: 'bar',
+    data: {
+      labels: years,
+      datasets: types.map((t) => ({
+        label: TYPE_LABEL[t],
+        data: years.map((y) => all.filter((r) => r.type === t && yearOf(r.applicationDate) === y).length),
+        backgroundColor: TYPE_COLOR[t],
+        borderRadius: 3,
+        stack: 'y',
+      })),
+    },
+    options: {
+      ...baseOptions(),
+      scales: { x: { ...gridX(), stacked: true }, y: { ...gridY(), stacked: true, ticks: { ...tickStyle(), precision: 0 } } },
+    },
+  });
+
+  const groups = [
+    { key: 'live', label: '등록', color: PALETTE[4] },
+    { key: 'progress', label: '진행중', color: PALETTE[3] },
+    { key: 'closed', label: '종료(거절·포기·이관)', color: PALETTE[9] },
+  ];
+  drawChart('statusChart', {
+    type: 'bar',
+    data: {
+      labels: types.map((t) => TYPE_LABEL[t]),
+      datasets: groups.map((g) => ({
+        label: g.label,
+        data: types.map((t) => all.filter((r) => r.type === t && r.statusGroup === g.key).length),
+        backgroundColor: g.color,
+        borderRadius: 3,
+        stack: 's',
+        maxBarThickness: 40,
+      })),
+    },
+    options: {
+      ...baseOptions(),
+      indexAxis: 'y',
+      scales: { x: { ...gridX(), stacked: true, ticks: { ...tickStyle(), precision: 0 } }, y: { ...gridY(false), stacked: true } },
+    },
+  });
+
+  // 개요의 TOP 5 는 개별 건이 아니라 발명(패밀리) 단위 — 같은 발명이 4번 나오면 표가 무의미해진다
+  const top = familyStats().filter((f) => f.score != null).sort((a, b) => b.score - a.score).slice(0, 5);
+  $('#topPatentsBody').innerHTML = top.length
+    ? top.map((f) => `<tr>
+        <td>${gradeTag(f.grade)}</td>
+        <td><span class="patent-link" data-family="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span></td>
+        <td><div class="tag-row">${[...f.countries].map((c) => `<span class="tag country">${escapeHtml(c)}</span>`).join('')}</div></td>
+        <td>${scoreBar(f.score)}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="4" class="empty-msg">평가된 특허가 없습니다.</td></tr>`;
+}
+
+/* ===== 권리 목록 ===== */
+function buildFilters() {
+  const tabs = [['', '전체'], ...countBy(db.rights, (r) => r.type).map(([k, v]) => [k, `${TYPE_LABEL[k]} ${v}`])];
+  $('#typeTabs').innerHTML = tabs
+    .map(([k, label]) => `<button class="scope-tab${filters.type === k ? ' active' : ''}" data-type="${k}">${escapeHtml(label)}</button>`)
+    .join('');
+  $$('#typeTabs .scope-tab').forEach((b) =>
+    b.addEventListener('click', () => { filters.type = b.dataset.type; buildFilters(); renderList(); })
+  );
+
+  const fill = (sel, entries, labelFn) => {
     const el = $(sel);
     const keep = el.querySelector('option').outerHTML;
-    el.innerHTML = keep + entries.map(([k, v]) => `<option value="${escapeHtml(k)}">${escapeHtml(labelFn(k))} (${v})</option>`).join('');
+    el.innerHTML = keep + entries.map(([k, v]) => `<option value="${escapeHtml(k)}"${el.value === k ? ' selected' : ''}>${escapeHtml(labelFn(k))} (${v})</option>`).join('');
   };
-  fill('#filterCountry', countBy(db.patents, (p) => p.country), (k) => COUNTRY_LABEL[k] || k);
-  fill('#filterStatus', countBy(db.patents, (p) => p.status), (k) => STATUS_LABEL[k] || k);
-  fill('#filterCategory', countBy(db.patents, (p) => p.category));
+  fill('#filterCountry', countBy(db.rights, (r) => r.country), (k) => COUNTRY_LABEL[k] || k);
+  fill('#filterStatus', countBy(db.rights, (r) => r.status), (k) => STATUS_LABEL[k] || k);
 }
 
 function filtered() {
   const q = filters.q.trim().toLowerCase();
-  return db.patents.filter((p) => {
-    if (filters.country && p.country !== filters.country) return false;
-    if (filters.status && p.status !== filters.status) return false;
-    if (filters.category && p.category !== filters.category) return false;
+  return db.rights.filter((r) => {
+    if (filters.type && r.type !== filters.type) return false;
+    if (filters.country && r.country !== filters.country) return false;
+    if (filters.status && r.status !== filters.status) return false;
     if (!q) return true;
-    const hay = [p.title, p.applicationNumber, p.registrationNumber, p.inventorText, p.family, p.category, p.abstract, ...p.ipc]
-      .join(' ')
-      .toLowerCase();
-    return hay.includes(q);
+    return [r.title, r.applicationNumber, r.registrationNumber, r.inventorText, r.family, r.mgmtNo, r.applicant]
+      .join(' ').toLowerCase().includes(q);
   });
 }
 
@@ -239,39 +250,15 @@ function sortRows(rows, state) {
   const mul = dir === 'asc' ? 1 : -1;
   const GRADE_ORDER = { S: 4, A: 3, B: 2, C: 1, NA: 0 };
   return [...rows].sort((a, b) => {
-    let x = a[key];
-    let y = b[key];
+    let x = a[key], y = b[key];
     if (key === 'grade') { x = GRADE_ORDER[x]; y = GRADE_ORDER[y]; }
-    // null 은 정렬 방향과 무관하게 항상 뒤로 — 미평가 건이 상위를 차지하면 표가 쓸모없어진다
+    // null 은 정렬 방향과 무관하게 항상 뒤로 — 빈 값이 상위를 차지하면 표가 쓸모없어진다
     if (x == null && y == null) return 0;
     if (x == null) return 1;
     if (y == null) return -1;
     if (typeof x === 'number' && typeof y === 'number') return (x - y) * mul;
     return String(x).localeCompare(String(y), 'ko') * mul;
   });
-}
-
-function renderList() {
-  const rows = sortRows(filtered(), sortState.list);
-  $('#listHint').textContent = `${rows.length}건 표시 (전체 ${db.patents.length}건) · 컬럼 클릭 시 정렬`;
-  $('#patentTable tbody').innerHTML = rows.length
-    ? rows
-        .map(
-          (p) => `<tr>
-            <td><span class="grade ${p.grade}">${p.grade === 'NA' ? '–' : p.grade}</span></td>
-            <td><span class="patent-link" data-id="${p.id}">${escapeHtml(p.title)}</span></td>
-            <td><span class="tag country">${escapeHtml(p.country)}</span></td>
-            <td><span class="tag ${p.status}">${STATUS_LABEL[p.status] || p.status}</span></td>
-            <td class="num dim">${escapeHtml(p.applicationNumber || '-')}</td>
-            <td class="num">${fmtDate(p.applicationDate)}</td>
-            <td class="num">${fmtDate(p.registrationDate)}</td>
-            <td>${escapeHtml(p.inventorText || '-')}</td>
-            <td>${scoreBar(p.score)}</td>
-          </tr>`
-        )
-        .join('')
-    : `<tr><td colspan="9" class="empty-msg">조건에 맞는 특허가 없습니다.</td></tr>`;
-  markSorted('#patentTable', sortState.list);
 }
 
 function markSorted(tableSel, state) {
@@ -282,98 +269,168 @@ function markSorted(tableSel, state) {
   });
 }
 
-/* ===== 관련 특허군 ===== */
-function renderFamily() {
-  const groups = new Map();
-  db.patents.forEach((p) => {
-    if (!groups.has(p.family)) groups.set(p.family, []);
-    groups.get(p.family).push(p);
+function renderList() {
+  const rows = sortRows(filtered(), sortState.list);
+  $('#listHint').textContent = `${rows.length}건 표시 (전체 ${db.rights.length}건) · 컬럼 클릭 시 정렬`;
+  $('#rightsTable tbody').innerHTML = rows.length
+    ? rows.map((r) => `<tr>
+        <td>${typeTag(r.type)}</td>
+        <td><span class="patent-link" data-id="${r.id}">${escapeHtml(r.title)}</span>${r.niceClass ? ` <span class="tag">${escapeHtml(r.niceClass)}류</span>` : ''}</td>
+        <td><span class="tag country">${escapeHtml(r.country)}</span></td>
+        <td><span class="tag ${r.status}">${STATUS_LABEL[r.status] || r.status}</span></td>
+        <td class="num dim">${escapeHtml(r.applicationNumber || '-')}</td>
+        <td class="num">${fmtDate(r.applicationDate)}</td>
+        <td class="num dim">${escapeHtml(r.registrationNumber || '-')}</td>
+        <td>${escapeHtml(r.inventorText || '-')}</td>
+        <td>${r.type === 'patent' ? gradeTag(r.grade) : '<span class="dim">-</span>'}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="9" class="empty-msg">조건에 맞는 권리가 없습니다.</td></tr>`;
+  markSorted('#rightsTable', sortState.list);
+}
+
+/* ===== 갱신 관리 ===== */
+function renderRenewal() {
+  // 오늘 기준 D-day. 시분 차이로 하루가 어긋나지 않게 날짜만 비교한다
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const dayDiff = (d) => Math.round((new Date(d + 'T00:00:00') - new Date(todayStr + 'T00:00:00')) / 86400000);
+
+  // DUE DATE 가 등록일과 같은 건은 실제 기한이 아니라 등록일이 그대로 복사된 것이라 제외한다
+  const notDeadline = db.rights.filter((r) => r.dueDate && r.dueDate === r.registrationDate).length;
+  const rows = db.rights
+    .filter((r) => r.dueDate && r.dueDate !== r.registrationDate)
+    .map((r) => {
+      const dday = dayDiff(r.dueDate);
+      // 기한이 지났어도 비고에 납부 기재가 있으면 처리된 건 — 빨간 경고로 띄우면 진짜 미납 건이 묻힌다
+      const paid = /납부|갱신|완료/.test(r.notes || '') && !/미납|예정|필요/.test(r.notes || '');
+      return { ...r, dday, state: dday < 0 ? (paid ? 'paid' : 'overdue') : dday <= 365 ? 'soon' : 'future' };
+    });
+
+  const soon = rows.filter((r) => r.state === 'soon');
+  const overdue = rows.filter((r) => r.state === 'overdue');
+
+  $('#renewalKpiRow').innerHTML = [
+    kpi('기한 관리 대상', rows.length, `등록일 복사분 ${notDeadline}건 제외`, 'calendar-clock', true),
+    kpi('1년 내 도래', soon.length, soon.length ? `가장 이른 건 D-${Math.min(...soon.map((r) => r.dday))}` : '해당 없음', 'alarm-clock'),
+    kpi('경과 · 미확인', overdue.length, '비고에 납부 기재가 없는 건', 'alert-triangle'),
+    kpi('납부 · 처리 확인', rows.filter((r) => r.state === 'paid').length, '비고 기재 기준', 'receipt'),
+  ].join('');
+
+  const LABEL = {
+    paid: (d) => `경과 ${-d}일`,
+    overdue: (d) => `경과 ${-d}일`,
+    soon: (d) => `D-${d}`,
+    future: (d) => `D-${d}`,
+  };
+  const CLS = { paid: 'paid', overdue: 'negative', soon: 'warn', future: 'dim' };
+
+  const sorted = sortRows(rows, sortState.renewal);
+  $('#renewalTable tbody').innerHTML = sorted.length
+    ? sorted.map((r) => `<tr>
+        <td class="num">${fmtDate(r.dueDate)}</td>
+        <td class="num dday ${CLS[r.state]}">${LABEL[r.state](r.dday)}${r.state === 'paid' ? ' <span class="tag registered">처리</span>' : ''}</td>
+        <td>${typeTag(r.type)}</td>
+        <td><span class="patent-link" data-id="${r.id}">${escapeHtml(r.title)}</span></td>
+        <td><span class="tag country">${escapeHtml(r.country)}</span></td>
+        <td class="num dim">${escapeHtml(r.registrationNumber || '-')}</td>
+        <td class="dim">${escapeHtml(r.notes || '-')}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="7" class="empty-msg">기한 관리 대상이 없습니다.</td></tr>`;
+  markSorted('#renewalTable', sortState.renewal);
+}
+
+/* ===== 특허 패밀리 ===== */
+function familyStats() {
+  const m = new Map();
+  patents().forEach((p) => {
+    if (!m.has(p.family)) {
+      m.set(p.family, { name: p.family, items: [], countries: new Set(), inventors: new Set(), evaluation: p.evaluation });
+    }
+    const f = m.get(p.family);
+    f.items.push(p);
+    f.countries.add(p.country);
+    p.inventors.forEach((i) => f.inventors.add(i));
+    if (Object.keys(p.evaluation || {}).length) f.evaluation = p.evaluation;
   });
-  const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+  return [...m.values()].map((f) => {
+    const score = scoreOf(f.evaluation);
+    return { ...f, count: f.items.length, score, grade: gradeOf(score), registered: f.items.filter((i) => i.status === 'registered').length };
+  });
+}
+
+function renderFamily() {
+  const fams = familyStats().sort((a, b) => b.count - a.count || (b.score ?? 0) - (a.score ?? 0));
 
   drawChart('familyChart', {
     type: 'bar',
     data: {
-      labels: sorted.map(([k]) => k),
-      datasets: [{ label: '보유 건수', data: sorted.map(([, v]) => v.length), backgroundColor: PALETTE[0], borderRadius: 4, maxBarThickness: 30 }],
+      labels: fams.map((f) => (f.name.length > 30 ? f.name.slice(0, 29) + '…' : f.name)),
+      datasets: [{ label: '보유 건수', data: fams.map((f) => f.count), backgroundColor: PALETTE[0], borderRadius: 3, maxBarThickness: 22 }],
     },
     options: {
       ...baseOptions(),
       indexAxis: 'y',
-      plugins: { ...baseOptions().plugins, legend: { display: false } },
-      scales: { x: { ...gridX(), ticks: { ...tickStyle(), precision: 0 } }, y: gridY(false) },
+      plugins: {
+        ...baseOptions().plugins,
+        legend: { display: false },
+        // 라벨을 잘라 표시하므로 툴팁에서는 전체 명칭을 보여준다
+        tooltip: { ...baseOptions().plugins.tooltip, callbacks: { title: (items) => fams[items[0].dataIndex].name } },
+      },
+      scales: { x: { ...gridX(), ticks: { ...tickStyle(), precision: 0 } }, y: { ...gridY(false), ticks: { ...tickStyle(), font: { size: 10 } } } },
     },
   });
 
-  $('#familyBody').innerHTML = sorted.length
-    ? sorted
-        .map(
-          ([name, items]) => `
+  $('#familyBody').innerHTML = fams.length
+    ? fams.map((f) => `
         <div class="family-group">
           <div class="family-name">
-            <span class="family-dot"></span>${escapeHtml(name)}
-            <span class="family-count">${items.length}건</span>
+            <span class="family-dot"></span>${escapeHtml(f.name)}
+            <span class="family-count">${f.count}건 · ${f.countries.size}개국</span>
+            ${f.score != null ? gradeTag(f.grade) : ''}
           </div>
           <div class="family-items">
-            ${items
-              .map(
-                (p) => `<div class="family-item" data-id="${p.id}">
-                  <div class="family-item-title">${escapeHtml(p.title)}</div>
-                  <div class="family-item-meta">
-                    <span class="tag country">${escapeHtml(p.country)}</span>
-                    <span class="tag ${p.status}">${STATUS_LABEL[p.status] || p.status}</span>
-                    <span class="grade ${p.grade}">${p.grade === 'NA' ? '–' : p.grade}</span>
-                    <span class="dim num">${fmtDate(p.applicationDate)}</span>
-                  </div>
-                </div>`
-              )
-              .join('')}
+            ${f.items.map((p) => `<div class="family-item" data-id="${p.id}">
+              <div class="family-item-meta">
+                <span class="tag country">${escapeHtml(p.country)}</span>
+                <span class="tag ${p.status}">${STATUS_LABEL[p.status] || p.status}</span>
+                <span class="dim num">${fmtDate(p.applicationDate)}</span>
+              </div>
+              <div class="family-item-no num">${escapeHtml(p.registrationNumber || p.applicationNumber || '')}</div>
+            </div>`).join('')}
           </div>
-        </div>`
-        )
-        .join('')
+        </div>`).join('')
     : `<div class="empty-msg">등록된 특허가 없습니다.</div>`;
 }
 
 /* ===== 발명자 ===== */
-function inventorStats() {
+function renderInventors() {
   const m = new Map();
-  db.patents.forEach((p) => {
+  patents().forEach((p) => {
     p.inventors.forEach((name) => {
-      if (!m.has(name)) m.set(name, { name, total: 0, registered: 0, pending: 0, scores: [], categories: new Map() });
+      if (!m.has(name)) m.set(name, { name, total: 0, registered: 0, scores: [], fams: new Map() });
       const s = m.get(name);
       s.total++;
       if (p.status === 'registered') s.registered++;
-      if (p.status === 'pending') s.pending++;
       if (p.score != null) s.scores.push(p.score);
-      s.categories.set(p.category, (s.categories.get(p.category) || 0) + 1);
+      s.fams.set(p.family, (s.fams.get(p.family) || 0) + 1);
     });
   });
-  return [...m.values()].map((s) => ({
+  const stats = [...m.values()].map((s) => ({
     ...s,
+    families: s.fams.size,
     avgScore: s.scores.length ? s.scores.reduce((a, b) => a + b, 0) / s.scores.length : null,
-    categoryText: [...s.categories.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => k).join(', '),
+    familyText: [...s.fams.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => (k.length > 22 ? k.slice(0, 21) + '…' : k)).join(', '),
   }));
-}
 
-function renderInventors() {
-  const stats = inventorStats();
-  const soleCount = db.patents.filter((p) => p.inventors.length === 1).length;
-  const coCount = db.patents.filter((p) => p.inventors.length > 1).length;
-  const avgPer = db.patents.length
-    ? db.patents.reduce((a, p) => a + p.inventors.length, 0) / db.patents.length
-    : 0;
+  const pats = patents();
+  const co = pats.filter((p) => p.inventors.length > 1).length;
+  const top1 = [...stats].sort((a, b) => b.total - a.total)[0];
 
   $('#inventorKpiRow').innerHTML = [
     kpi('총 발명자', stats.length, '중복 제거 기준', 'users', true),
-    kpi('공동발명 건', coCount, `단독발명 ${soleCount}건`, 'user-plus'),
-    kpi('건당 평균 발명자', avgPer.toFixed(1), '명', 'user-round'),
-    kpi(
-      '최다 참여',
-      stats.length ? escapeHtml([...stats].sort((a, b) => b.total - a.total)[0].name) : '-',
-      stats.length ? `${[...stats].sort((a, b) => b.total - a.total)[0].total}건 참여` : '',
-      'crown'
-    ),
+    kpi('공동발명 건', co, `단독발명 ${pats.filter((p) => p.inventors.length === 1).length}건`, 'user-plus'),
+    kpi('건당 평균 발명자', pats.length ? (pats.reduce((a, p) => a + p.inventors.length, 0) / pats.length).toFixed(1) : '0', '명', 'user-round'),
+    kpi('최다 참여', top1 ? escapeHtml(top1.name) : '-', top1 ? `${top1.total}건 · 발명 ${top1.families}개` : '', 'crown'),
   ].join('');
 
   const top = [...stats].sort((a, b) => b.total - a.total).slice(0, 15);
@@ -381,124 +438,91 @@ function renderInventors() {
     type: 'bar',
     data: {
       labels: top.map((s) => s.name),
-      // maxBarThickness — 발명자가 2~3명뿐일 때 막대가 캔버스 높이를 나눠 가져 우스꽝스럽게 두꺼워진다
       datasets: [
-        { label: '등록', data: top.map((s) => s.registered), backgroundColor: PALETTE[0], borderRadius: 4, stack: 's', maxBarThickness: 30 },
-        { label: '출원중', data: top.map((s) => s.pending), backgroundColor: PALETTE[3], borderRadius: 4, stack: 's', maxBarThickness: 30 },
-        {
-          label: '기타',
-          data: top.map((s) => s.total - s.registered - s.pending),
-          backgroundColor: PALETTE[9],
-          borderRadius: 4,
-          stack: 's',
-          maxBarThickness: 30,
-        },
+        { label: '등록', data: top.map((s) => s.registered), backgroundColor: PALETTE[0], borderRadius: 3, stack: 's', maxBarThickness: 30 },
+        { label: '그 외', data: top.map((s) => s.total - s.registered), backgroundColor: PALETTE[3], borderRadius: 3, stack: 's', maxBarThickness: 30 },
       ],
     },
     options: {
       ...baseOptions(),
       indexAxis: 'y',
-      scales: {
-        x: { ...gridX(), stacked: true, ticks: { ...tickStyle(), precision: 0 } },
-        y: { ...gridY(false), stacked: true },
-      },
+      scales: { x: { ...gridX(), stacked: true, ticks: { ...tickStyle(), precision: 0 } }, y: { ...gridY(false), stacked: true } },
     },
   });
 
   const rows = sortRows(stats, sortState.inventor);
   $('#inventorTable tbody').innerHTML = rows.length
-    ? rows
-        .map(
-          (s) => `<tr>
-            <td><b style="color:var(--text)">${escapeHtml(s.name)}</b></td>
-            <td class="num">${s.total}</td>
-            <td class="num">${s.registered}</td>
-            <td class="num">${s.pending}</td>
-            <td>${scoreBar(s.avgScore)}</td>
-            <td class="dim">${escapeHtml(s.categoryText || '-')}</td>
-          </tr>`
-        )
-        .join('')
+    ? rows.map((s) => `<tr>
+        <td><b style="color:var(--text)">${escapeHtml(s.name)}</b></td>
+        <td class="num">${s.total}</td>
+        <td class="num">${s.families}</td>
+        <td class="num">${s.registered}</td>
+        <td>${scoreBar(s.avgScore)}</td>
+        <td class="dim">${escapeHtml(s.familyText || '-')}</td>
+      </tr>`).join('')
     : `<tr><td colspan="6" class="empty-msg">발명자 정보가 없습니다.</td></tr>`;
   markSorted('#inventorTable', sortState.inventor);
 }
 
 /* ===== 기술평가 ===== */
 function renderEvaluation() {
-  const scored = db.patents.filter((p) => p.score != null);
-  const byGrade = (g) => db.patents.filter((p) => p.grade === g).length;
+  const fams = familyStats();
+  const scored = fams.filter((f) => f.score != null);
+  const byGrade = (g) => fams.filter((f) => f.grade === g).length;
   const axisAvg = AXES.map((a) => {
-    const vals = db.patents.map((p) => p.evaluation?.[a.key]).filter((v) => typeof v === 'number' && v > 0);
+    const vals = fams.map((f) => f.evaluation?.[a.key]).filter((v) => typeof v === 'number' && v > 0);
     return vals.length ? vals.reduce((x, y) => x + y, 0) / vals.length : 0;
   });
 
   $('#evalKpiRow').innerHTML = [
-    kpi('평가 완료', `${scored.length}<small>/${db.patents.length}</small>`, `미평가 ${db.patents.length - scored.length}건`, 'clipboard-check', true),
-    kpi('S등급', byGrade('S'), '종합 4.5점 이상 · 핵심 특허', 'star'),
-    kpi('A등급', byGrade('A'), '종합 3.5점 이상', 'thumbs-up'),
-    kpi('B·C등급', byGrade('B') + byGrade('C'), '보완 또는 정리 검토 대상', 'alert-circle'),
+    kpi('평가 완료', `${scored.length}<small>/${fams.length}</small>`, '특허 패밀리 기준', 'clipboard-check', true),
+    kpi('S등급', byGrade('S'), '종합 4.5↑ · 최우선 유지', 'star'),
+    kpi('A등급', byGrade('A'), '종합 3.5↑ · 핵심 자산', 'thumbs-up'),
+    kpi('B·C등급', byGrade('B') + byGrade('C'), '유지 실익 재검토 대상', 'alert-circle'),
   ].join('');
 
   drawChart('radarChart', {
     type: 'radar',
     data: {
       labels: AXES.map((a) => a.label),
-      datasets: [
-        {
-          label: '전체 평균',
-          data: axisAvg,
-          backgroundColor: 'rgba(66, 99, 235, 0.15)',
-          borderColor: PALETTE[0],
-          borderWidth: 2,
-          pointBackgroundColor: PALETTE[0],
-          pointRadius: 4,
-        },
-      ],
+      datasets: [{
+        label: '패밀리 평균', data: axisAvg,
+        backgroundColor: 'rgba(66, 99, 235, 0.15)', borderColor: PALETTE[0], borderWidth: 2,
+        pointBackgroundColor: PALETTE[0], pointRadius: 4,
+      }],
     },
     options: {
       ...baseOptions(),
       plugins: { ...baseOptions().plugins, legend: { display: false } },
       scales: {
         r: {
-          min: 0,
-          max: 5,
+          min: 0, max: 5,
           ticks: { stepSize: 1, backdropColor: 'transparent', color: '#9a9fa8', font: { size: 10 } },
-          grid: { color: '#ececf1' },
-          angleLines: { color: '#ececf1' },
+          grid: { color: '#ececf1' }, angleLines: { color: '#ececf1' },
           pointLabels: { color: '#495057', font: { size: 12, weight: '600' } },
         },
       },
     },
   });
 
-  // 등급별 색은 팔레트 순서가 아니라 등급에 고정 — S/A 를 같은 파란 계열로 두면 도넛에서 구분이 안 된다
-  const GRADE_COLOR = { S: '#4263eb', A: '#7950f2', B: '#868e96', C: '#e8590c' };
   const gradeEntries = ['S', 'A', 'B', 'C'].map((g) => [g, byGrade(g)]).filter(([, v]) => v > 0);
-  drawDoughnut(
-    'gradeChart',
-    gradeEntries.map(([g, v]) => [`${g}등급`, v]),
-    gradeEntries.map(([g]) => GRADE_COLOR[g])
-  );
+  drawDoughnut('gradeChart', gradeEntries.map(([g, v]) => [`${g}등급`, v]), gradeEntries.map(([g]) => GRADE_COLOR[g]));
 
   drawChart('matrixChart', {
-    type: 'scatter',
+    type: 'bubble',
     data: {
-      datasets: [
-        {
-          label: '특허',
-          // 같은 좌표에 여러 건이 겹치면 한 점으로 보인다 — 툴팁에 명칭을 실어 구분
-          data: scored.map((p) => ({
-            x: p.evaluation?.technology ?? 0,
-            y: p.evaluation?.marketability ?? 0,
-            id: p.id,
-            title: p.title,
-          })),
-          backgroundColor: 'rgba(66, 99, 235, 0.65)',
-          borderColor: PALETTE[0],
-          pointRadius: 7,
-          pointHoverRadius: 10,
-        },
-      ],
+      datasets: [{
+        // 같은 좌표에 여러 발명이 겹치므로 점 크기로 보유 건수를, 툴팁으로 명칭을 구분한다
+        data: scored.map((f) => ({
+          x: f.evaluation.technology ?? 0,
+          y: f.evaluation.marketability ?? 0,
+          r: 6 + f.count * 2,
+          name: f.name, count: f.count, grade: f.grade,
+        })),
+        backgroundColor: 'rgba(66, 99, 235, 0.5)',
+        borderColor: PALETTE[0],
+        borderWidth: 1.5,
+      }],
     },
     options: {
       ...baseOptions(),
@@ -508,124 +532,151 @@ function renderEvaluation() {
         tooltip: {
           ...baseOptions().plugins.tooltip,
           callbacks: {
-            label: (ctx) => [`${ctx.raw.title}`, `기술성 ${ctx.raw.x} · 시장성 ${ctx.raw.y}`],
+            title: (i) => i[0].raw.name,
+            label: (ctx) => [`${ctx.raw.grade}등급 · ${ctx.raw.count}건 보유`, `기술성 ${ctx.raw.x} · 시장성 ${ctx.raw.y}`],
           },
         },
       },
       onClick: (evt, els) => {
-        if (els.length) openDetail(charts.matrixChart.data.datasets[0].data[els[0].index].id);
+        if (els.length) openFamily(charts.matrixChart.data.datasets[0].data[els[0].index].name);
       },
       // 점수는 1~5 뿐이라 0부터 그리면 캔버스 아래·왼쪽 절반이 늘 빈 채로 남는다.
-      // 다만 min 을 0.5 로 두면 눈금이 0.5/1.5/... 로 찍혀서 정수로 고정한다
+      // min 을 0.5 로 두면 눈금이 0.5/1.5/... 로 찍혀서 정수로 고정한다
       scales: {
-        x: { ...gridX(), min: 0.5, max: 5.5, title: { display: true, text: '기술성 →', color: '#9a9fa8', font: { size: 11 } }, ticks: tickStyle(), afterBuildTicks: (ax) => { ax.ticks = [1, 2, 3, 4, 5].map((v) => ({ value: v })); } },
-        y: { ...gridY(), min: 0.5, max: 5.5, title: { display: true, text: '시장성 →', color: '#9a9fa8', font: { size: 11 } }, ticks: tickStyle(), afterBuildTicks: (ax) => { ax.ticks = [1, 2, 3, 4, 5].map((v) => ({ value: v })); } },
+        x: { ...gridX(), min: 0.5, max: 5.5, title: { display: true, text: '기술성 →', color: '#9a9fa8', font: { size: 11 } }, ticks: tickStyle(), afterBuildTicks: (a) => { a.ticks = [1, 2, 3, 4, 5].map((v) => ({ value: v })); } },
+        y: { ...gridY(), min: 0.5, max: 5.5, title: { display: true, text: '시장성 →', color: '#9a9fa8', font: { size: 11 } }, ticks: tickStyle(), afterBuildTicks: (a) => { a.ticks = [1, 2, 3, 4, 5].map((v) => ({ value: v })); } },
       },
     },
     plugins: [quadrantPlugin],
   });
 
-  const rows = sortRows(
-    db.patents.map((p) => ({
-      ...p,
-      technology: p.evaluation?.technology ?? null,
-      marketability: p.evaluation?.marketability ?? null,
-      rights: p.evaluation?.rights ?? null,
-      utilization: p.evaluation?.utilization ?? null,
-    })),
-    sortState.eval
-  );
+  const rows = sortRows(fams.map((f) => ({
+    ...f,
+    technology: f.evaluation?.technology ?? null,
+    marketability: f.evaluation?.marketability ?? null,
+    rights: f.evaluation?.rights ?? null,
+    utilization: f.evaluation?.utilization ?? null,
+  })), sortState.eval);
   const cell = (v) => (v == null ? '<span class="dim">-</span>' : `<span class="num">${v}</span>`);
   $('#evalTable tbody').innerHTML = rows.length
-    ? rows
-        .map(
-          (p) => `<tr>
-            <td><span class="grade ${p.grade}">${p.grade === 'NA' ? '–' : p.grade}</span></td>
-            <td><span class="patent-link" data-id="${p.id}">${escapeHtml(p.title)}</span></td>
-            <td>${cell(p.technology)}</td>
-            <td>${cell(p.marketability)}</td>
-            <td>${cell(p.rights)}</td>
-            <td>${cell(p.utilization)}</td>
-            <td>${scoreBar(p.score)}</td>
-          </tr>`
-        )
-        .join('')
-    : `<tr><td colspan="7" class="empty-msg">등록된 특허가 없습니다.</td></tr>`;
+    ? rows.map((f) => `<tr>
+        <td>${gradeTag(f.grade)}</td>
+        <td><span class="patent-link" data-family="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span></td>
+        <td class="num dim">${f.count}</td>
+        <td>${cell(f.technology)}</td><td>${cell(f.marketability)}</td>
+        <td>${cell(f.rights)}</td><td>${cell(f.utilization)}</td>
+        <td>${scoreBar(f.score)}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="8" class="empty-msg">등록된 특허가 없습니다.</td></tr>`;
   markSorted('#evalTable', sortState.eval);
 }
 
 /* ===== 상세 모달 ===== */
+const row = (k, v) => `<div class="detail-key">${k}</div><div class="detail-val">${v}</div>`;
+
+function evalBlock(ev, score) {
+  if (score == null) return '<div class="detail-text dim">아직 평가되지 않았습니다.</div>';
+  return `<div class="eval-bars">
+      ${AXES.map((a) => {
+        const v = ev?.[a.key];
+        return `<div class="eval-bar">
+          <span class="eval-bar-label">${a.label}</span>
+          <div class="score-track"><div class="score-fill" style="width:${((v || 0) / 5) * 100}%"></div></div>
+          <span class="score-value">${v ?? '-'}</span>
+        </div>`;
+      }).join('')}
+      <div class="eval-bar" style="margin-top:4px;padding-top:10px;border-top:1px solid var(--border)">
+        <span class="eval-bar-label"><b>종합</b></span>
+        <div class="score-track"><div class="score-fill" style="width:${(score / 5) * 100}%"></div></div>
+        <span class="score-value"><b>${score.toFixed(1)}</b></span>
+      </div>
+    </div>
+    ${ev?.comment ? `<div class="eval-comment">${escapeHtml(ev.comment)}</div>` : ''}`;
+}
+
 function openDetail(id) {
-  const p = db.patents.find((x) => x.id === id);
-  if (!p) return;
-  $('#modalTitle').textContent = p.title;
+  const r = db.rights.find((x) => x.id === id);
+  if (!r) return;
+  $('#modalTitle').textContent = r.title;
   $('#modalSub').innerHTML = [
-    `<span class="tag country">${escapeHtml(COUNTRY_LABEL[p.country] || p.country)}</span>`,
-    `<span class="tag ${p.status}">${STATUS_LABEL[p.status] || p.status}</span>`,
-    `<span class="tag">${escapeHtml(p.category)}</span>`,
-    p.score != null ? `<span class="grade ${p.grade}">${p.grade}</span>` : '',
+    typeTag(r.type),
+    `<span class="tag country">${escapeHtml(COUNTRY_LABEL[r.country] || r.country)}</span>`,
+    `<span class="tag ${r.status}">${STATUS_LABEL[r.status] || r.status}</span>`,
+    r.niceClass ? `<span class="tag">${escapeHtml(r.niceClass)}류</span>` : '',
+    r.type === 'patent' && r.score != null ? gradeTag(r.grade) : '',
   ].join('');
 
-  // 같은 특허군 = 관련 특허. 자기 자신은 제외
-  const related = db.patents.filter((x) => x.family === p.family && x.id !== p.id);
+  const related = r.type === 'patent' ? db.rights.filter((x) => x.type === 'patent' && x.family === r.family && x.id !== r.id) : [];
 
-  const row = (k, v) => `<div class="detail-key">${k}</div><div class="detail-val">${v}</div>`;
   $('#modalBody').innerHTML = `
     <div class="detail-section">
       <h4 class="detail-title">서지 정보</h4>
       <div class="detail-grid">
-        ${row('출원번호', escapeHtml(p.applicationNumber || '-'))}
-        ${row('출원일', fmtDate(p.applicationDate))}
-        ${row('등록번호', escapeHtml(p.registrationNumber || '-'))}
-        ${row('등록일', fmtDate(p.registrationDate))}
-        ${row('출원인', escapeHtml(p.applicant || '-'))}
-        ${row('발명자', escapeHtml(p.inventorText || '-'))}
-        ${row('IPC', p.ipc.length ? `<div class="tag-row">${p.ipc.map((c) => `<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>` : '-')}
-        ${row('적용 제품', p.productLine.length ? `<div class="tag-row">${p.productLine.map((c) => `<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>` : '-')}
-        ${row('특허군', escapeHtml(p.family))}
+        ${row('관리번호', escapeHtml(r.mgmtNo || '-'))}
+        ${row('출원번호', escapeHtml(r.applicationNumber || '-'))}
+        ${row('출원일', fmtDate(r.applicationDate))}
+        ${row('등록번호', escapeHtml(r.registrationNumber || '-'))}
+        ${row('등록일', fmtDate(r.registrationDate))}
+        ${row('DUE DATE', fmtDate(r.dueDate))}
+        ${row('출원인', escapeHtml(r.applicant || '-'))}
+        ${r.inventorText ? row('발명자', escapeHtml(r.inventorText)) : ''}
+        ${r.notes ? row('비고', escapeHtml(r.notes)) : ''}
+        ${r.docRef ? row('증서', escapeHtml(r.docRef)) : ''}
       </div>
     </div>
 
-    ${p.abstract ? `<div class="detail-section">
-      <h4 class="detail-title">요약</h4>
-      <div class="detail-text">${escapeHtml(p.abstract)}</div>
-    </div>` : ''}
-
+    ${r.type === 'patent' ? `
     <div class="detail-section">
-      <h4 class="detail-title">기술평가</h4>
-      ${p.score == null
-        ? '<div class="detail-text dim">아직 평가되지 않았습니다.</div>'
-        : `<div class="eval-bars">
-            ${AXES.map((a) => {
-              const v = p.evaluation?.[a.key];
-              return `<div class="eval-bar">
-                <span class="eval-bar-label">${a.label}</span>
-                <div class="score-track"><div class="score-fill" style="width:${((v || 0) / 5) * 100}%"></div></div>
-                <span class="score-value">${v ?? '-'}</span>
-              </div>`;
-            }).join('')}
-            <div class="eval-bar" style="margin-top:4px;padding-top:10px;border-top:1px solid var(--border)">
-              <span class="eval-bar-label"><b>종합</b></span>
-              <div class="score-track"><div class="score-fill" style="width:${(p.score / 5) * 100}%"></div></div>
-              <span class="score-value"><b>${p.score.toFixed(1)}</b></span>
-            </div>
-          </div>
-          ${p.evaluation?.comment ? `<div class="eval-comment">${escapeHtml(p.evaluation.comment)}</div>` : ''}`}
+      <h4 class="detail-title">기술평가 <span class="dim" style="font-weight:400;text-transform:none;letter-spacing:0">— 패밀리 「${escapeHtml(r.family)}」 공통</span></h4>
+      ${evalBlock(r.evaluation, r.score)}
     </div>
 
     <div class="detail-section">
-      <h4 class="detail-title">관련 특허 (${related.length})</h4>
+      <h4 class="detail-title">같은 발명의 다른 국가 출원 (${related.length})</h4>
       ${related.length
-        ? `<div class="related-list">${related
-            .map(
-              (r) => `<div class="related-item" data-id="${r.id}">
-                <span class="tag country">${escapeHtml(r.country)}</span>
-                <span class="related-item-title">${escapeHtml(r.title)}</span>
-                <span class="tag ${r.status}">${STATUS_LABEL[r.status] || r.status}</span>
-              </div>`
-            )
-            .join('')}</div>`
-        : '<div class="detail-text dim">같은 특허군에 다른 특허가 없습니다.</div>'}
+        ? `<div class="related-list">${related.map((x) => `<div class="related-item" data-id="${x.id}">
+            <span class="tag country">${escapeHtml(x.country)}</span>
+            <span class="related-item-title">${escapeHtml(x.registrationNumber || x.applicationNumber || '-')}</span>
+            <span class="tag ${x.status}">${STATUS_LABEL[x.status] || x.status}</span>
+          </div>`).join('')}</div>`
+        : '<div class="detail-text dim">이 발명은 해당 국가에만 출원되어 있습니다.</div>'}
+    </div>` : ''}`;
+
+  $('#modal').hidden = false;
+  if (window.lucide) lucide.createIcons();
+}
+
+/** 평가 랭킹·TOP5 에서는 개별 건이 아니라 패밀리를 열어 구성 건을 한 번에 보여준다 */
+function openFamily(name) {
+  const f = familyStats().find((x) => x.name === name);
+  if (!f) return;
+  $('#modalTitle').textContent = f.name;
+  $('#modalSub').innerHTML = [
+    typeTag('patent'),
+    `<span class="tag">${f.count}건 보유</span>`,
+    `<span class="tag">${f.countries.size}개국</span>`,
+    f.score != null ? gradeTag(f.grade) : '',
+  ].join('');
+
+  $('#modalBody').innerHTML = `
+    <div class="detail-section">
+      <h4 class="detail-title">기술평가</h4>
+      ${evalBlock(f.evaluation, f.score)}
+    </div>
+    <div class="detail-section">
+      <h4 class="detail-title">구성 특허 (${f.count})</h4>
+      <div class="related-list">
+        ${f.items.map((p) => `<div class="related-item" data-id="${p.id}">
+          <span class="tag country">${escapeHtml(p.country)}</span>
+          <span class="related-item-title">${escapeHtml(p.registrationNumber || p.applicationNumber || '-')}</span>
+          <span class="dim num">${fmtDate(p.applicationDate)}</span>
+          <span class="tag ${p.status}">${STATUS_LABEL[p.status] || p.status}</span>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div class="detail-section">
+      <h4 class="detail-title">발명자</h4>
+      <div class="tag-row">${[...f.inventors].map((i) => `<span class="tag">${escapeHtml(i)}</span>`).join('') || '<span class="dim">-</span>'}</div>
     </div>`;
 
   $('#modal').hidden = false;
@@ -641,8 +692,7 @@ const quadrantPlugin = {
   beforeDatasetsDraw(chart) {
     const { ctx, chartArea: a, scales: { x, y } } = chart;
     if (!a) return;
-    const cx = x.getPixelForValue(3);
-    const cy = y.getPixelForValue(3);
+    const cx = x.getPixelForValue(3), cy = y.getPixelForValue(3);
     ctx.save();
     ctx.fillStyle = 'rgba(66, 99, 235, 0.05)';
     ctx.fillRect(cx, a.top, a.right - cx, cy - a.top);
@@ -671,38 +721,22 @@ function baseOptions() {
     maintainAspectRatio: false,
     plugins: {
       legend: { position: 'bottom', labels: { color: '#495057', usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, font: { size: 12 } } },
-      tooltip: {
-        backgroundColor: '#1f2329',
-        padding: 12,
-        cornerRadius: 8,
-        titleFont: { size: 12 },
-        bodyFont: { size: 12 },
-        displayColors: false,
-      },
+      tooltip: { backgroundColor: '#1f2329', padding: 12, cornerRadius: 8, titleFont: { size: 12 }, bodyFont: { size: 12 }, displayColors: false },
     },
   };
 }
-
 function drawChart(id, config) {
   const el = document.getElementById(id);
   if (!el) return;
   if (charts[id]) charts[id].destroy();
   charts[id] = new Chart(el, config);
 }
-
 function drawDoughnut(id, entries, colors) {
   drawChart(id, {
     type: 'doughnut',
     data: {
       labels: entries.map(([k]) => k),
-      datasets: [
-        {
-          data: entries.map(([, v]) => v),
-          backgroundColor: colors || PALETTE,
-          borderWidth: 2,
-          borderColor: '#fff',
-        },
-      ],
+      datasets: [{ data: entries.map(([, v]) => v), backgroundColor: colors || PALETTE, borderWidth: 2, borderColor: '#fff' }],
     },
     options: {
       ...baseOptions(),
@@ -714,8 +748,7 @@ function drawDoughnut(id, entries, colors) {
           callbacks: {
             label: (ctx) => {
               const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-              const pct = total ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0';
-              return `${ctx.label}: ${ctx.parsed}건 (${pct}%)`;
+              return `${ctx.label}: ${ctx.parsed}건 (${total ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0'}%)`;
             },
           },
         },
@@ -726,8 +759,7 @@ function drawDoughnut(id, entries, colors) {
 
 /* ===== 뷰 전환 & 이벤트 ===== */
 function switchView(view) {
-  currentView = view;
-  ['overview', 'list', 'family', 'inventors', 'evaluation'].forEach((v) => {
+  ['overview', 'list', 'renewal', 'family', 'inventors', 'evaluation'].forEach((v) => {
     $(`#${v}View`).hidden = v !== view;
   });
   $$('.nav-item').forEach((el) => el.classList.toggle('active', el.dataset.view === view));
@@ -738,22 +770,19 @@ function switchView(view) {
 
 function bind() {
   $$('.nav-item').forEach((el) =>
-    el.addEventListener('click', (e) => {
-      e.preventDefault();
-      switchView(el.dataset.view);
-    })
+    el.addEventListener('click', (e) => { e.preventDefault(); switchView(el.dataset.view); })
   );
 
-  // 상세 열기 — 목록/카드/모달 내 관련특허 모두 위임으로 처리
+  // 상세 열기 — 목록/카드/모달 내 관련건 모두 위임으로 처리
   document.addEventListener('click', (e) => {
+    const fam = e.target.closest('[data-family]');
+    if (fam) return openFamily(fam.dataset.family);
     const t = e.target.closest('[data-id]');
     if (t) openDetail(t.dataset.id);
   });
 
   $$('[data-close]').forEach((el) => el.addEventListener('click', () => ($('#modal').hidden = true)));
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') $('#modal').hidden = true;
-  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#modal').hidden = true; });
 
   const bindSort = (tableSel, stateKey, rerender) => {
     $$(`${tableSel} thead th`).forEach((th) =>
@@ -767,14 +796,14 @@ function bind() {
       })
     );
   };
-  bindSort('#patentTable', 'list', renderList);
+  bindSort('#rightsTable', 'list', renderList);
+  bindSort('#renewalTable', 'renewal', renderRenewal);
   bindSort('#inventorTable', 'inventor', renderInventors);
   bindSort('#evalTable', 'eval', renderEvaluation);
 
   $('#searchInput').addEventListener('input', (e) => { filters.q = e.target.value; renderList(); });
   $('#filterCountry').addEventListener('change', (e) => { filters.country = e.target.value; renderList(); });
   $('#filterStatus').addEventListener('change', (e) => { filters.status = e.target.value; renderList(); });
-  $('#filterCategory').addEventListener('change', (e) => { filters.category = e.target.value; renderList(); });
 }
 
 bind();

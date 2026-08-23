@@ -340,9 +340,24 @@ tbody tr:hover { background: var(--surface-2); }
   color: var(--text-dim);
 }
 .tag.registered { background: var(--positive-soft); color: var(--positive); }
-.tag.pending { background: var(--warn-soft); color: var(--warn); }
+.tag.pending, .tag.examining, .tag.pct { background: var(--warn-soft); color: var(--warn); }
 .tag.rejected, .tag.abandoned, .tag.expired { background: var(--negative-soft); color: var(--negative); }
+.tag.transferred { background: var(--surface-2); color: var(--text-dim); }
 .tag.country { background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
+
+/* 권리유형 — 차트의 TYPE_COLOR 와 같은 색 계열로 맞춘다 */
+.tag.type-patent { background: var(--accent-soft); color: var(--accent); }
+.tag.type-trademark { background: #f3f0ff; color: #7950f2; }
+.tag.type-design { background: var(--warn-soft); color: #e8590c; }
+.tag.type-copyright { background: #e7f9fb; color: #0b7285; }
+
+/* 갱신 관리 D-day */
+.dday { font-weight: 700; }
+.dday.negative { color: var(--negative); }
+.dday.warn { color: var(--warn); }
+.dday.dim { color: var(--text-dim); font-weight: 500; }
+.dday.paid { color: var(--text-dim); font-weight: 500; }
+.dday.paid .tag { margin-left: 6px; }
 
 .tag-row { display: flex; flex-wrap: wrap; gap: 4px; }
 
@@ -395,6 +410,8 @@ tbody tr:hover { background: var(--surface-2); }
 .family-item:hover { border-color: var(--accent); transform: translateY(-1px); }
 .family-item-title { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.45; margin-bottom: 8px; }
 .family-item-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.family-item-no { margin-top: 8px; font-size: 12px; color: var(--text-sub); font-weight: 600; }
+.family-items { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
 
 /* ===== Modal ===== */
 .modal {
