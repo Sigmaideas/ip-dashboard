@@ -5,7 +5,9 @@
   "private": true,
   "scripts": {
     "dev": "node server.js",
-    "import": "node scripts/import-excel.js"
+    "import": "node scripts/import-excel.js",
+    "build": "node scripts/build-dist.js",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name ip-dashboard --branch main"
   },
   "dependencies": {
     "xlsx": "^0.18.5"

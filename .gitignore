@@ -9,3 +9,10 @@ node_modules/
 # 임포트 결과인 data/patents.json 만 커밋한다.
 inbox/*
 !inbox/.gitkeep
+
+# Pages 배포 산출물
+dist/
+.wrangler/
+
+# 배포 비밀번호 (로컬 보관용, 절대 커밋 금지)
+.deploy-password.txt
