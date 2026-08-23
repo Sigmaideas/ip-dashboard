@@ -10,9 +10,5 @@ node_modules/
 inbox/*
 !inbox/.gitkeep
 
-# Pages 배포 산출물
+# Pages 배포 산출물 (GitHub Actions 가 빌드한다)
 dist/
-.wrangler/
-
-# 배포 비밀번호 (로컬 보관용, 절대 커밋 금지)
-.deploy-password.txt
