@@ -350,6 +350,21 @@ tbody tr:hover { background: var(--surface-2); }
 .tag.type-design { background: var(--warn-soft); color: #e8590c; }
 .tag.type-copyright { background: #e7f9fb; color: #0b7285; }
 
+/* 키워드 × 연도 히트맵 — 셀 배경은 순차 램프, 글자색은 단계별로 app.js 가 지정한다 */
+.heatmap { width: 100%; border-collapse: separate; border-spacing: 2px; }
+.heatmap th { font-size: 12px; font-weight: 600; color: var(--text-dim); padding: 6px 8px; white-space: nowrap; }
+.heatmap td { padding: 0; }
+.heat-label { padding: 0 10px 0 2px; font-size: 13px; white-space: nowrap; }
+.heat-cell {
+  width: 52px; height: 34px; text-align: center; vertical-align: middle;
+  font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 4px;
+}
+/* 0 은 램프 밖 — 빈 칸이 '적음' 으로 읽히면 안 된다 */
+.heat-zero { background: var(--surface-2); color: #c3c6cd; font-weight: 400; }
+.heat-total { padding: 0 4px 0 12px; font-size: 13px; font-weight: 600; color: var(--text-dim); }
+.keyword-link { cursor: pointer; border-bottom: 1px solid transparent; }
+.keyword-link:hover { color: var(--accent); border-bottom-color: currentColor; }
+
 .tag-row { display: flex; flex-wrap: wrap; gap: 4px; }
 
 /* 등급 뱃지 — 기술평가 종합 등급 */

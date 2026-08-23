@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <!-- ?v= 는 캐시 버스팅. GitHub Pages 가 max-age=600 으로 내려줘서 파라미터를 안 바꾸면
        코드를 고쳐도 브라우저가 10분간 옛 파일을 계속 쓴다. app.js/style.css 수정 시 함께 올릴 것 -->
-  <link rel="stylesheet" href="style.css?v=2" />
+  <link rel="stylesheet" href="style.css?v=3" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
 </head>
@@ -34,6 +34,11 @@
         <i data-lucide="git-branch" class="nav-icon"></i>
         특허 패밀리
         <span class="nav-badge" id="badgeFamily">0</span>
+      </a>
+      <a class="nav-item" data-view="keyword">
+        <i data-lucide="tags" class="nav-icon"></i>
+        키워드
+        <span class="nav-badge" id="badgeKeyword">0</span>
       </a>
       <a class="nav-item" data-view="inventors">
         <i data-lucide="users" class="nav-icon"></i>
@@ -170,6 +175,38 @@
         </section>
       </div>
 
+      <!-- ===== 키워드 ===== -->
+      <div class="view" id="keywordView" hidden>
+        <section class="card">
+          <div class="empty-banner">
+            <strong>키워드 도출 방식</strong>
+            <p style="margin-bottom:0">
+              특허 <b>명칭</b>에서 도메인 개념어를 매칭해 집계합니다. 같은 발명을 여러 나라에 출원한 건이
+              중복 집계되지 않도록 <b>패밀리 단위</b>로 셉니다. 한 패밀리가 여러 키워드에 걸칠 수 있어
+              키워드 합계는 전체 패밀리 수보다 큽니다. 명칭만 근거로 하므로 청구범위 기준 분류와는 다를 수 있습니다.
+            </p>
+          </div>
+        </section>
+
+        <section class="kpi-row" id="keywordKpiRow"></section>
+
+        <section class="card chart-card">
+          <div class="card-head">
+            <h2><i data-lucide="tags" class="head-icon"></i>키워드별 특허 패밀리</h2>
+            <span class="hint">막대를 누르면 해당 키워드의 패밀리 목록이 열립니다</span>
+          </div>
+          <div class="chart-wrap chart-wrap-tall"><canvas id="keywordChart"></canvas></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2><i data-lucide="grid-3x3" class="head-icon"></i>키워드 × 출원연도</h2>
+            <span class="hint">출원 건수 기준 · 진할수록 많음</span>
+          </div>
+          <div class="table-wrap"><div id="keywordHeatmap"></div></div>
+        </section>
+      </div>
+
       <!-- ===== 발명자 ===== -->
       <div class="view" id="inventorsView" hidden>
         <section class="kpi-row" id="inventorKpiRow"></section>
@@ -288,6 +325,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

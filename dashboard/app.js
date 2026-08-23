@@ -24,10 +24,33 @@ const AXES = [
   { key: 'utilization', label: '활용도' },
 ];
 const GRADE_COLOR = { S: '#4263eb', A: '#7950f2', B: '#868e96', C: '#e8590c' };
+
+/* 명칭에서 뽑는 도메인 개념어. 형태소 분석 없이 명칭을 토큰으로 쪼개면
+   '이송로봇'/'이송 로봇', '로봇팔'/'로봇 팔' 이 서로 다른 낱말로 갈리고
+   1건짜리 꼬리만 잔뜩 남아 분석이 되지 않는다. 개념 단위로 직접 묶는다.
+   매칭은 공백을 지운 명칭에 대고 하므로 띄어쓰기 차이는 흡수된다.
+   새 특허가 어느 키워드에도 안 걸리면 KPI 의 '미분류' 로 드러난다 — 그때 여기에 추가할 것 */
+const KEYWORDS = [
+  ['자율주행', /자율주행|자율이동|무인주행|자율/],
+  ['이송·물류', /이송|물류|배송|전달|운반|수거/],
+  ['로봇팔·핸드', /로봇팔|다관절|그리퍼|디스펜서|핸드/],
+  ['무인매장·결제', /무인상점|무인결제|무인|결제|주문|매장/],
+  ['식음료·조리', /커피|드립|아이스크림|식음료|음식|제조|인쇄/],
+  ['의료·방역', /병원|수술|혈액|진단|열화상|방역/],
+  ['안전·충돌방지', /충돌|안전|위험도|교통약자/],
+  ['영상·인식', /영상|이미지|인식|판단/],
+  ['플랫폼·모듈화', /플랫폼|모듈화|시스템용/],
+  ['순찰·청소', /순찰|청소|해변|옥내외/],
+];
+// 히트맵용 순차 램프(밝음→어두움). 각 단계가 글자 대비 4.5:1 을 넘도록 고른 값이라
+// 중간을 임의로 끼워 넣으면 셀 위 숫자가 읽히지 않는다
+const HEAT_RAMP = ['#d7dffb', '#b6c4f8', '#8fa2f3', '#4263eb', '#26409e'];
+const HEAT_INK = ['#1f2329', '#1f2329', '#1f2329', '#ffffff', '#ffffff'];
 const VIEW_TITLE = {
   overview: 'IP 포트폴리오 개요',
   list: '권리 목록',
   family: '특허 패밀리',
+  keyword: '키워드',
   inventors: '발명자 분석',
   evaluation: '기술평가',
 };
@@ -118,6 +141,7 @@ function render() {
   $('#pageEyebrow').textContent = db.meta.company || '주식회사 엑스와이지';
 
   $('#badgeList').textContent = db.rights.length;
+  $('#badgeKeyword').textContent = keywordStats().rows.length;
   $('#badgeFamily').textContent = new Set(patents().map((p) => p.family)).size;
   $('#badgeInventors').textContent = new Set(patents().flatMap((p) => p.inventors)).size;
 
@@ -125,6 +149,7 @@ function render() {
   renderOverview();
   renderList();
   renderFamily();
+  renderKeywords();
   renderInventors();
   renderEvaluation();
   if (window.lucide) lucide.createIcons();
@@ -345,6 +370,129 @@ function renderFamily() {
           </div>
         </div>`).join('')
     : `<div class="empty-msg">등록된 특허가 없습니다.</div>`;
+}
+
+/* ===== 키워드 ===== */
+function keywordStats() {
+  // 같은 발명의 다국 출원이 중복으로 잡히지 않게 패밀리로 먼저 묶는다
+  const fams = new Map();
+  patents().forEach((p) => {
+    if (!fams.has(p.family)) fams.set(p.family, []);
+    fams.get(p.family).push(p);
+  });
+
+  const rows = KEYWORDS.map(([label, re]) => ({ label, re, families: [] }));
+  let unmatched = 0;
+  fams.forEach((items, name) => {
+    const flat = name.replace(/\s+/g, '');
+    const hit = rows.filter((r) => r.re.test(flat));
+    if (!hit.length) { unmatched += 1; return; }
+    hit.forEach((r) => r.families.push({ name, items }));
+  });
+
+  rows.forEach((r) => {
+    r.familyCount = r.families.length;
+    r.patentCount = r.families.reduce((n, f) => n + f.items.length, 0);
+  });
+  return {
+    rows: rows.filter((r) => r.familyCount).sort((a, b) => b.familyCount - a.familyCount || a.label.localeCompare(b.label)),
+    totalFamilies: fams.size,
+    unmatched,
+  };
+}
+
+function renderKeywords() {
+  const { rows, totalFamilies, unmatched } = keywordStats();
+  const top = rows[0];
+  // 2개 이상 키워드에 걸친 패밀리 = 기술이 겹쳐 있는 정도
+  const overlap = new Map();
+  rows.forEach((r) => r.families.forEach((f) => overlap.set(f.name, (overlap.get(f.name) || 0) + 1)));
+  const multi = [...overlap.values()].filter((n) => n > 1).length;
+
+  $('#keywordKpiRow').innerHTML = [
+    kpi('키워드', rows.length, `패밀리 ${totalFamilies - unmatched}개 분류`, 'tags', true),
+    kpi('최다 키워드', top ? top.familyCount : 0, top ? `${top.label} · 특허 ${top.patentCount}건` : '해당 없음', 'trending-up'),
+    kpi('복합 기술 패밀리', multi, '2개 이상 키워드에 걸친 건', 'layers'),
+    kpi('미분류', unmatched, unmatched ? '키워드 사전 보완 필요' : '전 패밀리 분류됨', 'help-circle'),
+  ].join('');
+
+  drawChart('keywordChart', {
+    type: 'bar',
+    data: {
+      labels: rows.map((r) => r.label),
+      // 길이가 크기를 이미 나타내므로 색은 단일 색상으로 둔다
+      datasets: [{ data: rows.map((r) => r.familyCount), backgroundColor: '#4263eb', borderRadius: 4, barThickness: 18 }],
+    },
+    options: {
+      ...baseOptions(),
+      indexAxis: 'y',
+      plugins: {
+        ...baseOptions().plugins,
+        legend: { display: false },
+        tooltip: {
+          ...baseOptions().plugins.tooltip,
+          callbacks: {
+            label: (ctx) => `패밀리 ${ctx.parsed.x}개 · 특허 ${rows[ctx.dataIndex].patentCount}건`,
+          },
+        },
+      },
+      scales: { x: { ...gridY(), ticks: { ...tickStyle(), precision: 0 } }, y: gridX() },
+      onClick: (_e, els) => { if (els.length) openKeyword(rows[els[0].index].label); },
+    },
+  });
+
+  renderKeywordHeat(rows);
+}
+
+function renderKeywordHeat(rows) {
+  const years = [...new Set(patents().map((p) => yearOf(p.applicationDate)).filter(Boolean))].sort();
+  const at = (r, y) => r.families.reduce((n, f) => n + f.items.filter((p) => yearOf(p.applicationDate) === y).length, 0);
+  const max = Math.max(1, ...rows.flatMap((r) => years.map((y) => at(r, y))));
+  // 0 은 램프를 쓰지 않는다 — 빈 칸과 '조금 있음' 이 같은 색으로 보이면 안 된다
+  const step = (v) => Math.min(HEAT_RAMP.length - 1, Math.ceil((v / max) * HEAT_RAMP.length) - 1);
+
+  $('#keywordHeatmap').innerHTML = `
+    <table class="heatmap">
+      <thead>
+        <tr><th>키워드</th>${years.map((y) => `<th class="num">${y}</th>`).join('')}<th class="num">합계</th></tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => `<tr>
+          <td class="heat-label"><span class="keyword-link" data-keyword="${escapeHtml(r.label)}">${escapeHtml(r.label)}</span></td>
+          ${years.map((y) => {
+            const v = at(r, y);
+            if (!v) return '<td class="heat-cell heat-zero" title="0건">·</td>';
+            const i = step(v);
+            return `<td class="heat-cell" style="background:${HEAT_RAMP[i]};color:${HEAT_INK[i]}" title="${escapeHtml(r.label)} · ${y}년 ${v}건">${v}</td>`;
+          }).join('')}
+          <td class="num heat-total">${r.patentCount}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function openKeyword(label) {
+  const row = keywordStats().rows.find((r) => r.label === label);
+  if (!row) return;
+  $('#modalTitle').textContent = label;
+  $('#modalSub').innerHTML = [
+    `<span class="tag">패밀리 ${row.familyCount}개</span>`,
+    `<span class="tag">특허 ${row.patentCount}건</span>`,
+  ].join('');
+  const fams = [...row.families].sort((a, b) => b.items.length - a.items.length);
+  $('#modalBody').innerHTML = `
+    <div class="detail-section">
+      <h4 class="detail-title">해당 특허 패밀리 (${fams.length})</h4>
+      <div class="related-list">
+        ${fams.map((f) => `<div class="related-item" data-family="${escapeHtml(f.name)}">
+          <span class="related-item-title">${escapeHtml(f.name)}</span>
+          <span class="dim num">${f.items.length}건</span>
+          <span class="tag country">${escapeHtml([...new Set(f.items.map((p) => p.country))].join(' '))}</span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  $('#modal').hidden = false;
+  if (window.lucide) lucide.createIcons();
 }
 
 /* ===== 발명자 ===== */
@@ -704,7 +852,7 @@ function drawDoughnut(id, entries, colors) {
 
 /* ===== 뷰 전환 & 이벤트 ===== */
 function switchView(view) {
-  ['overview', 'list', 'family', 'inventors', 'evaluation'].forEach((v) => {
+  ['overview', 'list', 'family', 'keyword', 'inventors', 'evaluation'].forEach((v) => {
     $(`#${v}View`).hidden = v !== view;
   });
   $$('.nav-item').forEach((el) => el.classList.toggle('active', el.dataset.view === view));
@@ -720,6 +868,8 @@ function bind() {
 
   // 상세 열기 — 목록/카드/모달 내 관련건 모두 위임으로 처리
   document.addEventListener('click', (e) => {
+    const kw = e.target.closest('[data-keyword]');
+    if (kw) return openKeyword(kw.dataset.keyword);
     const fam = e.target.closest('[data-family]');
     if (fam) return openFamily(fam.dataset.family);
     const t = e.target.closest('[data-id]');
