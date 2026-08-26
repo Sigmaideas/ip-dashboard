@@ -3,7 +3,7 @@
 주식회사 엑스와이지(XYZ, Inc.)가 보유한 지식재산권 — 특허·상표·디자인·저작권을 한 화면에서 관리하는 **회사 내부용** 대시보드입니다.
 보유 현황과 발명자·관련 특허군을 정리하고, 특허에 대해서는 4개 축 기반의 간단한 기술평가를 함께 관리합니다.
 
-**배포 주소 — https://sigmaideas.github.io/xyz-ip-dashboard**
+**배포 주소 — https://sigmaideas.github.io/xyz-ip**
 (`main` 에 푸시하면 GitHub Actions 가 자동 배포합니다.)
 
 디자인 컨셉과 색·타이포는 [loungex-brand-dashboard](https://github.com/Sigmaideas/loungex-brand-dashboard)와 동일하게 맞췄습니다.
@@ -189,7 +189,7 @@ npm run import -- <파일> --sheet "엑스와이지부산"
 ## 파일 구조
 
 ```
-xyz-ip-dashboard/
+xyz-ip/
 ├── dashboard/
 │   ├── index.html
 │   ├── app.js            # 렌더링·차트·필터·정렬
